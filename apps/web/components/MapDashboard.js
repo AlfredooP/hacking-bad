@@ -11,6 +11,169 @@ const PRIORITY_COLORS = {
   baja: "#22c55e",
 };
 
+// Inject marker CSS keyframes once
+const MARKER_STYLES_ID = "map-marker-styles";
+function injectMarkerStyles() {
+  if (typeof document === "undefined") return;
+  if (document.getElementById(MARKER_STYLES_ID)) return;
+
+  const style = document.createElement("style");
+  style.id = MARKER_STYLES_ID;
+  style.textContent = `
+    @keyframes marker-ping {
+      0% { transform: scale(1); opacity: 0.6; }
+      75%, 100% { transform: scale(1.8); opacity: 0; }
+    }
+    @keyframes marker-pulse {
+      0%, 100% { opacity: 0.6; }
+      50% { opacity: 0.3; }
+    }
+    @keyframes truck-pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.7; }
+    }
+    .maplibregl-popup-content {
+      background: #1e293b !important;
+      border: 1px solid #475569 !important;
+      border-radius: 12px !important;
+      padding: 0 !important;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.5) !important;
+      color: #e2e8f0 !important;
+    }
+    .maplibregl-popup-tip {
+      border-top-color: #1e293b !important;
+    }
+    .maplibregl-popup-close-button {
+      color: #94a3b8 !important;
+      font-size: 18px !important;
+      padding: 4px 8px !important;
+    }
+    .maplibregl-popup-close-button:hover {
+      color: #fff !important;
+      background: transparent !important;
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+function createContainerMarkerEl(color, priority, vol) {
+  const el = document.createElement("div");
+  el.style.cssText = "position:relative;cursor:pointer;width:36px;height:36px;transition:transform 0.2s ease;";
+
+  el.addEventListener("mouseenter", () => { el.style.transform = "scale(1.3)"; });
+  el.addEventListener("mouseleave", () => { el.style.transform = "scale(1)"; });
+
+  // Pulse ring
+  const pulse = document.createElement("div");
+  pulse.className = "marker-pulse-ring";
+  pulse.style.cssText = `
+    position:absolute;inset:-4px;border-radius:50%;opacity:0.6;
+    background:${color};filter:blur(4px);
+    animation:${vol >= 80 ? "marker-ping 1.5s cubic-bezier(0,0,0.2,1) infinite" : "marker-pulse 2s ease-in-out infinite"};
+  `;
+  el.appendChild(pulse);
+
+  // Icon circle
+  const badge = document.createElement("div");
+  badge.className = "marker-badge";
+  badge.style.cssText = `
+    position:relative;width:100%;height:100%;border-radius:50%;
+    display:flex;align-items:center;justify-content:center;
+    border:2.5px solid #fff;box-shadow:0 4px 12px rgba(0,0,0,0.4);
+    background:${color};
+  `;
+  badge.innerHTML = `
+    <svg style="width:18px;height:18px;color:#fff;" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+    </svg>
+  `;
+  el.appendChild(badge);
+
+  return el;
+}
+
+function createTruckMarkerEl() {
+  const el = document.createElement("div");
+  el.style.cssText = "cursor:pointer;width:38px;height:38px;transition:transform 0.2s ease;";
+
+  el.addEventListener("mouseenter", () => { el.style.transform = "scale(1.3)"; });
+  el.addEventListener("mouseleave", () => { el.style.transform = "scale(1)"; });
+
+  const circle = document.createElement("div");
+  circle.style.cssText = `
+    width:100%;height:100%;border-radius:50%;
+    background:linear-gradient(135deg,#0284c7,#0ea5e9);
+    border:2.5px solid #fff;display:flex;align-items:center;justify-content:center;
+    box-shadow:0 4px 12px rgba(14,165,233,0.35);
+  `;
+  circle.innerHTML = `
+    <svg style="width:20px;height:20px;color:#fff;" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17a2 2 0 11-4 0 2 2 0 014 0zM19 17a2 2 0 11-4 0 2 2 0 014 0z" />
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10M21 16V10a1 1 0 00-1-1h-7m8 7H13" />
+    </svg>
+  `;
+  el.appendChild(circle);
+  return el;
+}
+
+function containerPopupHTML(c, color, priority, vol) {
+  return `
+    <div style="padding:14px 16px;font-family:system-ui,-apple-system,sans-serif;">
+      <h4 style="font-weight:700;font-size:14px;color:#f1f5f9;border-bottom:1px solid #334155;padding-bottom:8px;margin:0 0 10px 0;">
+        ${c.ubicacion || "Contenedor"}
+      </h4>
+      <div style="display:flex;flex-direction:column;gap:6px;font-size:12px;">
+        <div style="display:flex;justify-content:space-between;">
+          <span style="color:#94a3b8;">Tipo:</span>
+          <span style="color:#f1f5f9;font-weight:600;">${c.tipoResiduo || "Sin definir"}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;">
+          <span style="color:#94a3b8;">Nivel Llenado:</span>
+          <span style="color:#f1f5f9;font-weight:600;">${vol}%</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <span style="color:#94a3b8;">Prioridad:</span>
+          <span style="background:${color};color:#fff;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:700;text-transform:capitalize;">${priority}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;">
+          <span style="color:#94a3b8;">Estado:</span>
+          <span style="color:#f1f5f9;font-weight:600;">${c.estado || "—"}</span>
+        </div>
+        <div style="margin-top:6px;">
+          <div style="width:100%;background:#0f172a;border-radius:4px;height:6px;overflow:hidden;">
+            <div style="width:${vol}%;height:100%;border-radius:4px;background:${color};transition:width 0.3s;"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function truckPopupHTML(t) {
+  const statusColor = t.estado === "Disponible" ? "#22c55e" : t.estado === "En Ruta" ? "#f59e0b" : "#ef4444";
+  return `
+    <div style="padding:14px 16px;font-family:system-ui,-apple-system,sans-serif;">
+      <h4 style="font-weight:700;font-size:14px;color:#f1f5f9;border-bottom:1px solid #334155;padding-bottom:8px;margin:0 0 10px 0;">
+        Camión ${t.placa}
+      </h4>
+      <div style="display:flex;flex-direction:column;gap:6px;font-size:12px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <span style="color:#94a3b8;">Estado:</span>
+          <span style="background:${statusColor};color:#fff;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:700;">${t.estado}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;">
+          <span style="color:#94a3b8;">Carga Disp:</span>
+          <span style="color:#f1f5f9;font-weight:600;">${t.capacidadDisponible}kg / ${t.capacidadMax}kg</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;">
+          <span style="color:#94a3b8;">Residuos:</span>
+          <span style="color:#38bdf8;font-weight:600;">${t.tipoResiduos || "Cualquiera"}</span>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
 export default function MapDashboard() {
   const mapRef = useRef(null);
   const mapInstance = useRef(null);
@@ -34,6 +197,11 @@ export default function MapDashboard() {
 
   // Polling trigger
   const [tick, setTick] = useState(0);
+
+  // Inject marker CSS on mount
+  useEffect(() => {
+    injectMarkerStyles();
+  }, []);
 
   // 1. Fetch data periodically
   useEffect(() => {
@@ -66,7 +234,6 @@ export default function MapDashboard() {
   useEffect(() => {
     if (!mapRef.current || mapInstance.current) return;
 
-    // Center map around first container coordinate, or general area
     const center = [-103.436, 25.533];
 
     const map = new maplibregl.Map({
@@ -111,6 +278,21 @@ export default function MapDashboard() {
       });
 
       map.addLayer({
+        id: "route-glow",
+        type: "line",
+        source: "route",
+        layout: {
+          "line-join": "round",
+          "line-cap": "round",
+        },
+        paint: {
+          "line-color": "#0ea5e9",
+          "line-width": 12,
+          "line-opacity": 0.25,
+        },
+      });
+
+      map.addLayer({
         id: "route-line",
         type: "line",
         source: "route",
@@ -122,21 +304,6 @@ export default function MapDashboard() {
           "line-color": "#38bdf8",
           "line-width": 5,
           "line-opacity": 0.85,
-        },
-      });
-
-      map.addLayer({
-        id: "route-glow",
-        type: "line",
-        source: "route",
-        layout: {
-          "line-join": "round",
-          "line-cap": "round",
-        },
-        paint: {
-          "line-color": "#0ea5e9",
-          "line-width": 10,
-          "line-opacity": 0.3,
         },
       });
     });
@@ -152,12 +319,11 @@ export default function MapDashboard() {
     const map = mapInstance.current;
     if (!map) return;
 
-    // Check if map is loaded. If not, wait for "load" event.
     if (!map.isStyleLoaded()) {
       return;
     }
 
-    // --- Containers Markers ---
+    // --- Container Markers ---
     containers.forEach((c) => {
       if (!c.latitud || !c.longitud) return;
 
@@ -168,37 +334,15 @@ export default function MapDashboard() {
       let marker = containerMarkersRef.current[c.id];
 
       if (!marker) {
-        // Create custom HTML element for marker
-        const el = document.createElement("div");
-        el.className = "relative cursor-pointer transition-all hover:scale-125";
-        el.style.width = "28px";
-        el.style.height = "28px";
+        const el = createContainerMarkerEl(color, priority, vol);
 
-        // SVG container icon with glassmorphism glow
-        el.innerHTML = `
-          <div class="marker-pulse absolute -inset-1.5 rounded-full opacity-60 bg-${priority === "alta" ? "red" : priority === "media" ? "amber" : "green"}-500 blur-sm ${vol >= 80 ? "animate-ping" : ""}"></div>
-          <div class="relative w-full h-full rounded-full flex items-center justify-center border-2 border-white shadow-lg" style="background: ${color};">
-            <svg class="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-            </svg>
-          </div>
-        `;
-
-        el.addEventListener("click", () => {
+        el.addEventListener("click", (e) => {
+          e.stopPropagation();
           setSelectedContainer(c);
         });
 
-        const popup = new maplibregl.Popup({ offset: 15 }).setHTML(`
-          <div class="p-2 text-slate-800 font-sans">
-            <h4 class="font-bold text-sm border-b border-slate-200 pb-1 mb-1">${c.ubicacion || "Contenedor"}</h4>
-            <div class="text-xs space-y-1">
-              <p><strong>Tipo:</strong> ${c.tipoResiduo || "Sin definir"}</p>
-              <p><strong>Nivel Llenado:</strong> ${vol}%</p>
-              <p><strong>Prioridad:</strong> <span class="capitalize px-1.5 py-0.5 rounded text-[10px] text-white" style="background: ${color};">${priority}</span></p>
-              <p><strong>Estado:</strong> ${c.estado || "—"}</p>
-            </div>
-          </div>
-        `);
+        const popup = new maplibregl.Popup({ offset: 20, closeButton: true, maxWidth: "260px" })
+          .setHTML(containerPopupHTML(c, color, priority, vol));
 
         marker = new maplibregl.Marker({ element: el })
           .setLngLat([c.longitud, c.latitud])
@@ -207,32 +351,29 @@ export default function MapDashboard() {
 
         containerMarkersRef.current[c.id] = marker;
       } else {
-        // Update existing marker details
+        // Update existing marker
         marker.setLngLat([c.longitud, c.latitud]);
         const el = marker.getElement();
-        const pulse = el.querySelector(".marker-pulse");
-        const badge = el.querySelector(".relative");
 
-        if (pulse) {
-          pulse.className = `marker-pulse absolute -inset-1.5 rounded-full opacity-60 bg-${priority === "alta" ? "red" : priority === "media" ? "amber" : "green"}-500 blur-sm ${vol >= 80 ? "animate-ping" : ""}`;
+        // Update pulse ring
+        const pulseRing = el.querySelector(".marker-pulse-ring");
+        if (pulseRing) {
+          pulseRing.style.background = color;
+          pulseRing.style.animation = vol >= 80
+            ? "marker-ping 1.5s cubic-bezier(0,0,0.2,1) infinite"
+            : "marker-pulse 2s ease-in-out infinite";
         }
+
+        // Update badge color
+        const badge = el.querySelector(".marker-badge");
         if (badge) {
           badge.style.background = color;
         }
 
+        // Update popup
         const popup = marker.getPopup();
         if (popup) {
-          popup.setHTML(`
-            <div class="p-2 text-slate-800 font-sans">
-              <h4 class="font-bold text-sm border-b border-slate-200 pb-1 mb-1">${c.ubicacion || "Contenedor"}</h4>
-              <div class="text-xs space-y-1">
-                <p><strong>Tipo:</strong> ${c.tipoResiduo || "Sin definir"}</p>
-                <p><strong>Nivel Llenado:</strong> ${vol}%</p>
-                <p><strong>Prioridad:</strong> <span class="capitalize px-1.5 py-0.5 rounded text-[10px] text-white" style="background: ${color};">${priority}</span></p>
-                <p><strong>Estado:</strong> ${c.estado || "—"}</p>
-              </div>
-            </div>
-          `);
+          popup.setHTML(containerPopupHTML(c, color, priority, vol));
         }
       }
     });
@@ -245,36 +386,17 @@ export default function MapDashboard() {
       }
     });
 
-    // --- Trucks Markers ---
+    // --- Truck Markers ---
     trucks.forEach((t) => {
       if (!t.latitud || !t.longitud) return;
 
       let marker = truckMarkersRef.current[t.id];
 
       if (!marker) {
-        const el = document.createElement("div");
-        el.className = "cursor-pointer transition-transform hover:scale-125";
-        el.style.width = "32px";
-        el.style.height = "32px";
-        el.innerHTML = `
-          <div class="w-full h-full rounded-full bg-sky-600 border-2 border-white flex items-center justify-center shadow-md">
-            <svg class="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17a2 2 0 11-4 0 2 2 0 014 0zM19 17a2 2 0 11-4 0 2 2 0 014 0z" />
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10M21 16V10a1 1 0 00-1-1h-7m8 7H13" />
-            </svg>
-          </div>
-        `;
+        const el = createTruckMarkerEl();
 
-        const popup = new maplibregl.Popup({ offset: 15 }).setHTML(`
-          <div class="p-2 text-slate-800 font-sans">
-            <h4 class="font-bold text-sm border-b border-slate-200 pb-1 mb-1">Camión ${t.placa}</h4>
-            <div class="text-xs space-y-1">
-              <p><strong>Estado:</strong> ${t.estado}</p>
-              <p><strong>Carga Disp:</strong> ${t.capacidadDisponible}kg / ${t.capacidadMax}kg</p>
-              <p><strong>Residuos:</strong> ${t.tipoResiduos || "Cualquiera"}</p>
-            </div>
-          </div>
-        `);
+        const popup = new maplibregl.Popup({ offset: 20, closeButton: true, maxWidth: "260px" })
+          .setHTML(truckPopupHTML(t));
 
         marker = new maplibregl.Marker({ element: el })
           .setLngLat([t.longitud, t.latitud])
@@ -286,16 +408,7 @@ export default function MapDashboard() {
         marker.setLngLat([t.longitud, t.latitud]);
         const popup = marker.getPopup();
         if (popup) {
-          popup.setHTML(`
-            <div class="p-2 text-slate-800 font-sans">
-              <h4 class="font-bold text-sm border-b border-slate-200 pb-1 mb-1">Camión ${t.placa}</h4>
-              <div class="text-xs space-y-1">
-                <p><strong>Estado:</strong> ${t.estado}</p>
-                <p><strong>Carga Disp:</strong> ${t.capacidadDisponible}kg / ${t.capacidadMax}kg</p>
-                <p><strong>Residuos:</strong> ${t.tipoResiduos || "Cualquiera"}</p>
-              </div>
-            </div>
-          `);
+          popup.setHTML(truckPopupHTML(t));
         }
       }
     });
@@ -319,7 +432,6 @@ export default function MapDashboard() {
         return;
       }
 
-      // Find the truck and container coordinates
       const selectedTruck = trucks.find((t) => t.id === res.truckId);
       if (!selectedTruck) return;
 
@@ -330,7 +442,7 @@ export default function MapDashboard() {
       const points = [
         [selectedTruck.longitud, selectedTruck.latitud],
         ...orderedContainers.map((c) => [c.longitud, c.latitud]),
-        [selectedTruck.longitud, selectedTruck.latitud], // Return to base
+        [selectedTruck.longitud, selectedTruck.latitud],
       ];
 
       // Fetch road geometries from OSRM
@@ -349,7 +461,6 @@ export default function MapDashboard() {
       }
 
       if (!routeGeojson) {
-        // Fallback directly to straight lines
         routeGeojson = {
           type: "LineString",
           coordinates: points,
@@ -365,7 +476,6 @@ export default function MapDashboard() {
           geometry: routeGeojson,
         });
 
-        // Fit map bounds to show entire route
         const coordinates = routeGeojson.coordinates;
         const bounds = coordinates.reduce(
           (acc, coord) => acc.extend(coord),
@@ -396,18 +506,25 @@ export default function MapDashboard() {
     const { truck, containers: orderedContainers, geometry } = activeRoute;
     const coordinates = geometry.coordinates;
 
-    // Create Simulated Truck Marker
+    // Create Simulated Truck Marker with inline styles
     const simTruckEl = document.createElement("div");
-    simTruckEl.style.width = "40px";
-    simTruckEl.style.height = "40px";
-    simTruckEl.innerHTML = `
-      <div class="relative w-full h-full rounded-full bg-emerald-500 border-2 border-white flex items-center justify-center shadow-xl animate-pulse">
-        <svg class="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 17a2 2 0 11-4 0 2 2 0 014 0zM19 17a2 2 0 11-4 0 2 2 0 014 0z" />
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10M21 16V10a1 1 0 00-1-1h-7m8 7H13" />
-        </svg>
-      </div>
+    simTruckEl.style.cssText = "width:44px;height:44px;";
+
+    const simCircle = document.createElement("div");
+    simCircle.style.cssText = `
+      position:relative;width:100%;height:100%;border-radius:50%;
+      background:linear-gradient(135deg,#059669,#10b981);
+      border:3px solid #fff;display:flex;align-items:center;justify-content:center;
+      box-shadow:0 0 20px rgba(16,185,129,0.5);
+      animation:truck-pulse 1s ease-in-out infinite;
     `;
+    simCircle.innerHTML = `
+      <svg style="width:24px;height:24px;color:#fff;" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 17a2 2 0 11-4 0 2 2 0 014 0zM19 17a2 2 0 11-4 0 2 2 0 014 0z" />
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10M21 16V10a1 1 0 00-1-1h-7m8 7H13" />
+      </svg>
+    `;
+    simTruckEl.appendChild(simCircle);
 
     const simMarker = new maplibregl.Marker({ element: simTruckEl })
       .setLngLat(coordinates[0])
@@ -415,7 +532,7 @@ export default function MapDashboard() {
 
     simTruckMarkerRef.current = simMarker;
 
-    // Temporarily hide actual truck marker to avoid duplicates
+    // Hide actual truck marker
     if (truckMarkersRef.current[truck.id]) {
       truckMarkersRef.current[truck.id].getElement().style.display = "none";
     }
@@ -428,19 +545,15 @@ export default function MapDashboard() {
 
     const animateTruck = () => {
       if (stepIndex >= totalSteps) {
-        // Simulation completed!
         setSimulationStep("Simulación finalizada. Retornando a base.");
         setTimeout(async () => {
-          // Remove simulated marker
           simMarker.remove();
           simTruckMarkerRef.current = null;
 
-          // Restore normal truck marker
           if (truckMarkersRef.current[truck.id]) {
             truckMarkersRef.current[truck.id].getElement().style.display = "block";
           }
 
-          // Update truck capacity in database
           try {
             await api.truckUpdate(truck.id, {
               capacidadDisponible: currentCapacityAvailable,
@@ -452,7 +565,7 @@ export default function MapDashboard() {
 
           setIsSimulating(false);
           setActiveRoute(null);
-          setTick((t) => t + 1); // Refresh map data
+          setTick((t) => t + 1);
           alert("¡Recolección completada con éxito! La ruta ha sido procesada.");
         }, 1500);
         return;
@@ -462,7 +575,6 @@ export default function MapDashboard() {
       simMarker.setLngLat(currentPos);
       map.setCenter(currentPos);
 
-      // Check if truck is currently visiting a container
       const visitingContainer = orderedContainers.find(
         (c) =>
           Math.abs(c.longitud - currentPos[0]) < 0.0001 &&
@@ -471,18 +583,14 @@ export default function MapDashboard() {
 
       if (visitingContainer) {
         setSimulationStep(`Recolectando residuos en ${visitingContainer.ubicacion}...`);
-        
-        // Wait 1.5 seconds at the container to simulate emptying process
+
         setTimeout(async () => {
           try {
-            // Send emptying request to backend! This makes it reflect in database!
             await api.containerUpdate(visitingContainer.id, { empty: true });
 
-            // Calculate collected weight (volume % * avg container volume of 150L/kg)
             const weightCollected = Math.round(((visitingContainer.ia?.volumenPct ?? 0) / 100.0) * 150.0);
             currentCapacityAvailable = Math.max(0, currentCapacityAvailable - weightCollected);
 
-            // Temporarily empty it in local state
             setContainers((prev) =>
               prev.map((c) =>
                 c.id === visitingContainer.id
@@ -499,13 +607,11 @@ export default function MapDashboard() {
         }, 1500);
       } else {
         setSimulationStep(`Camión ${truck.placa} en movimiento...`);
-        // Move to next point in 100ms
         stepIndex++;
         setTimeout(animateTruck, 80);
       }
     };
 
-    // Set truck status to 'En Ruta' in backend
     try {
       await api.truckUpdate(truck.id, { estado: "En Ruta" });
     } catch (e) {
@@ -529,19 +635,19 @@ export default function MapDashboard() {
   };
 
   return (
-    <div className="relative h-[calc(100vh-8rem)] w-full flex overflow-hidden rounded-xl border border-slate-700 bg-slate-950">
-      {/* Map container (100% of workspace) */}
-      <div ref={mapRef} className="absolute inset-0 z-10 w-full h-full" />
+    <div className="relative w-full flex overflow-hidden rounded-xl border border-slate-700 bg-slate-950" style={{ height: "calc(100vh - 8rem)" }}>
+      {/* Map container */}
+      <div ref={mapRef} style={{ position: "absolute", inset: 0, zIndex: 10, width: "100%", height: "100%" }} />
 
       {/* Real-time stats header overlay */}
-      <div className="absolute top-4 left-4 z-20 flex gap-2">
+      <div style={{ position: "absolute", top: 16, left: 16, zIndex: 20, display: "flex", gap: 8 }}>
         <div className="px-4 py-2 bg-slate-900/90 backdrop-blur-md border border-slate-700/50 rounded-xl shadow-lg flex items-center gap-3">
-          <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+          <div style={{ width: 10, height: 10, borderRadius: "50%", background: "#22c55e", animation: "marker-pulse 2s ease-in-out infinite" }} />
           <span className="text-xs font-semibold text-slate-300">Monitoreo en Tiempo Real</span>
         </div>
 
         {isSimulating && (
-          <div className="px-4 py-2 bg-emerald-950/90 backdrop-blur-md border border-emerald-500/50 rounded-xl shadow-lg flex items-center gap-3 animate-pulse">
+          <div className="px-4 py-2 bg-emerald-950/90 backdrop-blur-md border border-emerald-500/50 rounded-xl shadow-lg flex items-center gap-3" style={{ animation: "truck-pulse 1s ease-in-out infinite" }}>
             <svg className="w-4 h-4 text-emerald-400 animate-spin" fill="none" viewBox="0 0 24 24">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
@@ -552,7 +658,7 @@ export default function MapDashboard() {
       </div>
 
       {/* Floating Interactive Panel */}
-      <aside className="absolute right-4 top-4 bottom-4 w-80 z-20 bg-slate-900/80 backdrop-blur-md border border-slate-700/50 rounded-xl shadow-2xl p-4 flex flex-col justify-between overflow-y-auto">
+      <aside className="absolute right-4 top-4 bottom-4 w-80 bg-slate-900/80 backdrop-blur-md border border-slate-700/50 rounded-xl shadow-2xl p-4 flex flex-col justify-between overflow-y-auto" style={{ zIndex: 20 }}>
         <div className="space-y-6">
           <div>
             <h3 className="text-lg font-bold text-white tracking-wide">Gestión Inteligente</h3>
@@ -561,12 +667,12 @@ export default function MapDashboard() {
 
           {/* Quick Metrics */}
           <div className="grid grid-cols-2 gap-2 text-center">
-            <div className="p-2 bg-slate-800/60 rounded-lg border border-slate-750">
-              <span className="text-slate-400 text-[10px] block font-medium">Contenedores</span>
+            <div className="p-2 bg-slate-800/60 rounded-lg border border-slate-700">
+              <span className="text-slate-400 block font-medium" style={{ fontSize: 10 }}>Contenedores</span>
               <span className="text-lg font-bold text-white">{containers.length}</span>
             </div>
-            <div className="p-2 bg-slate-800/60 rounded-lg border border-slate-750">
-              <span className="text-slate-400 text-[10px] block font-medium">Camiones Activos</span>
+            <div className="p-2 bg-slate-800/60 rounded-lg border border-slate-700">
+              <span className="text-slate-400 block font-medium" style={{ fontSize: 10 }}>Camiones Activos</span>
               <span className="text-lg font-bold text-sky-400">
                 {trucks.filter((t) => t.estado === "Disponible").length}/{trucks.length}
               </span>
@@ -576,14 +682,14 @@ export default function MapDashboard() {
           {/* Route Optimization Box */}
           <div className="p-3.5 bg-slate-800/40 rounded-xl border border-slate-700/30 space-y-3">
             <h4 className="text-xs font-bold text-white uppercase tracking-wider">Optimización de Ruta</h4>
-            
+
             {!activeRoute ? (
               <button
                 disabled={isSimulating || loading}
                 onClick={handleOptimizeRoute}
                 className="w-full btn-primary py-2 text-xs flex items-center justify-center gap-2"
               >
-                <svg className="w-4 h-4 text-emerald-950" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg style={{ width: 16, height: 16 }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
                 </svg>
                 Calcular Ruta con IA
@@ -627,7 +733,7 @@ export default function MapDashboard() {
 
           {/* Selected container summary */}
           {selectedContainer ? (
-            <div className="p-3 bg-slate-800/50 border border-slate-700/50 rounded-xl space-y-3 relative animate-fadeIn">
+            <div className="p-3 bg-slate-800/50 border border-slate-700/50 rounded-xl space-y-3 relative">
               <div className="flex justify-between items-start">
                 <h4 className="text-xs font-bold text-white uppercase tracking-wider">Detalle de Contenedor</h4>
                 <button
@@ -653,18 +759,20 @@ export default function MapDashboard() {
                 </div>
 
                 <div className="space-y-1 pt-1">
-                  <div className="flex justify-between text-[11px]">
+                  <div className="flex justify-between" style={{ fontSize: 11 }}>
                     <span className="text-slate-400">Nivel de Llenado:</span>
                     <span className="font-bold text-white">
                       {selectedContainer.ia?.volumenPct != null ? Math.round(selectedContainer.ia.volumenPct) : 0}%
                     </span>
                   </div>
-                  <div className="w-full bg-slate-900 rounded-full h-1.5 overflow-hidden">
+                  <div className="w-full bg-slate-900 rounded-full overflow-hidden" style={{ height: 6 }}>
                     <div
-                      className="h-full rounded-full transition-all duration-300"
+                      className="rounded-full"
                       style={{
+                        height: "100%",
                         width: `${selectedContainer.ia?.volumenPct || 0}%`,
                         backgroundColor: PRIORITY_COLORS[selectedContainer.ia?.prioridad || "baja"],
+                        transition: "width 0.3s",
                       }}
                     />
                   </div>
@@ -678,9 +786,9 @@ export default function MapDashboard() {
           )}
         </div>
 
-        <div className="pt-4 border-t border-slate-800 text-[10px] text-slate-500 text-center flex justify-between">
+        <div className="pt-4 border-t border-slate-800 text-center flex justify-between" style={{ fontSize: 10, color: "#64748b" }}>
           <span>Actualizado automáticamente</span>
-          <button onClick={() => setTick((t) => t + 1)} className="hover:text-white underline">
+          <button onClick={() => setTick((t) => t + 1)} className="hover:text-white underline" style={{ color: "inherit" }}>
             Refrescar ahora
           </button>
         </div>
