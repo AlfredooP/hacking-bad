@@ -18,3 +18,5 @@ COPY --from=base /app/scripts/docker-entrypoint.sh /docker-entrypoint.sh
 RUN sed -i 's/\r$//' /docker-entrypoint.sh && chmod +x /docker-entrypoint.sh
 EXPOSE 4000
 CMD ["sh", "/docker-entrypoint.sh"]
+
+RUN apk add --no-cache mysql-client netcat-openbsd curl
