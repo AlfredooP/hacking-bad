@@ -34,5 +34,20 @@ export function containersRoutes(env: Env): Router {
     }
   });
 
+  router.put("/:id", auth, async (req, res, next) => {
+    try {
+      const id = parseInt(String(req.params.id), 10);
+      if (req.body.empty) {
+        await containersService.emptyContainer(id);
+        res.json({ message: "Container emptied" });
+      } else {
+        const updated = await containersService.updateContainer(id, req.body);
+        res.json({ container: updated });
+      }
+    } catch (e) {
+      next(e);
+    }
+  });
+
   return router;
 }

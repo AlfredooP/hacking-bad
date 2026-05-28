@@ -32,4 +32,28 @@ export const api = {
   me: () => request("/auth/me"),
   containersMap: () => request("/containers/map"),
   dashboardStats: () => request("/containers/stats"),
+  containerUpdate: (id, data) =>
+    request(`/containers/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+  trucksList: () => request("/trucks"),
+  truckCreate: (data) =>
+    request("/trucks", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  truckUpdate: (id, data) =>
+    request(`/trucks/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+  truckDelete: (id) =>
+    request(`/trucks/${id}`, {
+      method: "DELETE",
+    }),
+  aiOptimizeRoute: () =>
+    request("/ai/optimize-route", {
+      method: "POST",
+    }),
 };

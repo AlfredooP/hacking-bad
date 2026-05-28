@@ -10,25 +10,17 @@ const MapDashboard = dynamic(() => import("@/components/MapDashboard"), {
 });
 
 export default function MapaPage() {
-  const [containers, setContainers] = useState([]);
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    api
-      .containersMap()
-      .then((d) => setContainers(d.containers))
-      .catch((e) => setError(e.message));
-  }, []);
-
   return (
-    <div>
-      <h1 className="text-2xl font-bold mb-4">Mapa de contenedores</h1>
-      {error && <p className="text-red-400 mb-4">{error}</p>}
-      {containers.length > 0 ? (
-        <MapDashboard containers={containers} />
-      ) : (
-        !error && <p className="text-slate-400">Cargando contenedores…</p>
-      )}
+    <div className="space-y-4">
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-extrabold tracking-tight text-white">Mapa de Contenedores</h1>
+          <p className="text-slate-400 text-sm mt-1">
+            Monitorea y simula rutas óptimas de recolección en tiempo real.
+          </p>
+        </div>
+      </div>
+      <MapDashboard />
     </div>
   );
 }
