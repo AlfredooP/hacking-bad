@@ -8,24 +8,30 @@ datasource db {
 }
 
 model Camion {
-  idCamion  Int     @id @default(autoincrement()) @map("id_camion")
-  placa     String? @db.VarChar(20)
-  capacidad String? @db.VarChar(20)
-  estado    String? @db.VarChar(20)
-  rutas     Ruta[]
+  idCamion            Int      @id @default(autoincrement()) @map("id_camion")
+  placa               String?  @db.VarChar(20)
+  capacidad           String?  @db.VarChar(20)
+  capacidadMax        Float?   @map("capacidad_max")
+  capacidadDisponible Float?   @map("capacidad_disponible")
+  estado              String?  @db.VarChar(20)
+  latitud             Decimal? @db.Decimal(10, 6)
+  longitud            Decimal? @db.Decimal(10, 6)
+  tipoResiduos        String?  @map("tipo_residuos") @db.VarChar(255)
+  rutas               Ruta[]
 
   @@map("Camiones")
 }
 
 model Contenedor {
-  idContenedor Int      @id @default(autoincrement()) @map("id_contenedor")
-  ubicacion    String?  @db.VarChar(100)
-  latitud      Decimal? @db.Decimal(10, 6)
-  longitud     Decimal? @db.Decimal(10, 6)
-  capacidad    String?  @db.VarChar(20)
-  estado       String?  @db.VarChar(20)
-  sensores     Sensor[]
-  resultadoIa  ResultadoIa?
+  idContenedor     Int              @id @default(autoincrement()) @map("id_contenedor")
+  ubicacion        String?          @db.VarChar(100)
+  latitud          Decimal?         @db.Decimal(10, 6)
+  longitud         Decimal?         @db.Decimal(10, 6)
+  capacidad        String?          @db.VarChar(20)
+  estado           String?          @db.VarChar(20)
+  tipoResiduo      String?          @map("tipo_residuo") @db.VarChar(50)
+  sensores         Sensor[]
+  resultadoIa      ResultadoIa?
   rutaContenedores RutaContenedor[]
 
   @@map("Contenedores")
