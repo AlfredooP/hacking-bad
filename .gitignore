@@ -1,0 +1,17 @@
+node_modules/
+.next/
+dist/
+build/
+.env
+.env.local
+*.log
+.DS_Store
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.pkl
+uploads/*
+!uploads/.gitkeep
+.idea/
+.vscode/

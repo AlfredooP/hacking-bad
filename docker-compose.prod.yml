@@ -1,0 +1,29 @@
+services:
+  nginx:
+    ports:
+      - "80:80"
+      - "443:443"
+
+  api:
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  web:
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  ai:
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  mysql:
+    deploy:
+      resources:
+        limits:
+          memory: 1G
