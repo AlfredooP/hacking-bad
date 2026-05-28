@@ -81,3 +81,104 @@ function estimateVolume(c: ClassifyInput): number {
 function parseCapacity(cap?: number | null): number {
   return cap && cap > 0 ? cap : 50;
 }
+
+export interface OptimizeRouteInput {
+  containers: {
+    id: number;
+    latitud: number;
+    longitud: number;
+    volumenPct: number;
+    prioridad: string;
+    tipoResiduo: string;
+  }[];
+  trucks: {
+    id: number;
+    latitud: number;
+    longitud: number;
+    capacidadDisponible: number;
+    tipoResiduos: string;
+  }[];
+}
+
+export interface OptimizeRouteResult {
+  truckId: number | null;
+  route: number[];
+  metrics: {
+    totalContainers: number;
+    estimatedVolume: number;
+    urgencyScore: number;
+  };
+}
+
+export async function optimizeRoute(
+  env: Env,
+  input: OptimizeRouteInput
+): Promise<OptimizeRouteResult> {
+  try {
+    const res = await fetch(`${env.AI_SERVICE_URL}/internal/v1/optimize-route`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Internal-Token": env.AI_SERVICE_TOKEN,
+      },
+      body: JSON.stringify(input),
+    });
+
+    if (!res.ok) {
+      logger.warn({ status: res.status }, "AI service returned error on optimizeRoute");
+      return fallbackOptimize(input);
+    }
+
+    const data = (await res.json()) as OptimizeRouteResult;
+    return data;
+  } catch (err) {
+    logger.warn({ err }, "AI service unreachable for optimizeRoute, using fallback");
+    return fallbackOptimize(input);
+  }
+}
+
+function fallbackOptimize(input: OptimizeRouteInput): OptimizeRouteResult {
+  const critical = input.containers.filter((c) => c.volumenPct >= 70 || c.prioridad === "alta");
+  if (critical.length === 0 || input.trucks.length === 0) {
+    return {
+      truckId: input.trucks[0]?.id ?? null,
+      route: [],
+      metrics: { totalContainers: 0, estimatedVolume: 0, urgencyScore: 0 },
+    };
+  }
+
+  const truck = input.trucks[0];
+  let currentLat = truck.latitud;
+  let currentLng = truck.longitud;
+  const unvisited = [...critical];
+  const route: number[] = [];
+
+  while (unvisited.length > 0) {
+    let bestIndex = 0;
+    let minDistance = Infinity;
+
+    for (let i = 0; i < unvisited.length; i++) {
+      const c = unvisited[i];
+      const d = Math.pow(c.latitud - currentLat, 2) + Math.pow(c.longitud - currentLng, 2);
+      if (d < minDistance) {
+        minDistance = d;
+        bestIndex = i;
+      }
+    }
+
+    const nextContainer = unvisited.splice(bestIndex, 1)[0];
+    route.push(nextContainer.id);
+    currentLat = nextContainer.latitud;
+    currentLng = nextContainer.longitud;
+  }
+
+  return {
+    truckId: truck.id,
+    route,
+    metrics: {
+      totalContainers: route.length,
+      estimatedVolume: route.length * 150,
+      urgencyScore: 85,
+    },
+  };
+}

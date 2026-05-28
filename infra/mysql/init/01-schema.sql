@@ -5,7 +5,12 @@ CREATE TABLE IF NOT EXISTS `Camiones` (
   `id_camion` int NOT NULL AUTO_INCREMENT,
   `placa` varchar(20) DEFAULT NULL,
   `capacidad` varchar(20) DEFAULT NULL,
+  `capacidad_max` float DEFAULT NULL,
+  `capacidad_disponible` float DEFAULT NULL,
   `estado` varchar(20) DEFAULT NULL,
+  `latitud` decimal(10,6) DEFAULT NULL,
+  `longitud` decimal(10,6) DEFAULT NULL,
+  `tipo_residuos` varchar(255) DEFAULT NULL,
   PRIMARY KEY (`id_camion`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -16,6 +21,7 @@ CREATE TABLE IF NOT EXISTS `Contenedores` (
   `longitud` decimal(10,6) DEFAULT NULL,
   `capacidad` varchar(20) DEFAULT NULL,
   `estado` varchar(20) DEFAULT NULL,
+  `tipo_residuo` varchar(50) DEFAULT NULL,
   PRIMARY KEY (`id_contenedor`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -97,10 +103,14 @@ CREATE TABLE IF NOT EXISTS `Usuarios` (
   UNIQUE KEY `email` (`email`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-INSERT IGNORE INTO `Contenedores` (`id_contenedor`, `ubicacion`, `latitud`, `longitud`, `capacidad`, `estado`) VALUES
-(1,'Edificio 19',25.533254,-103.436151,'200L','Lleno'),
-(2,'Lab Computo',25.532843,-103.436120,'200L','Vacío'),
-(3,'Fuente',25.532954,-103.435852,'150L','Medio');
+INSERT IGNORE INTO `Contenedores` (`id_contenedor`, `ubicacion`, `latitud`, `longitud`, `capacidad`, `estado`, `tipo_residuo`) VALUES
+(1,'Edificio 19',25.533254,-103.436151,'200L','Lleno','Orgánicos'),
+(2,'Lab Computo',25.532843,-103.436120,'200L','Vacío','Reciclables'),
+(3,'Fuente',25.532954,-103.435852,'150L','Medio','Inorgánicos');
+
+INSERT IGNORE INTO `Camiones` (`id_camion`, `placa`, `capacidad`, `capacidad_max`, `capacidad_disponible`, `estado`, `latitud`, `longitud`, `tipo_residuos`) VALUES
+(1, 'TRK-001', '1000kg', 1000, 1000, 'Disponible', 25.532500, -103.435000, 'Orgánicos,Reciclables'),
+(2, 'TRK-002', '1500kg', 1500, 1500, 'Disponible', 25.534000, -103.437000, 'Inorgánicos,Residuos especiales');
 
 INSERT IGNORE INTO `Sensores` (`id_sensor`, `tipo_sensor`, `id_contenedor`) VALUES
 (1,'Infrarrojo',1),(2,'Infrarrojo',2),(3,'Ultrasónico',3);
