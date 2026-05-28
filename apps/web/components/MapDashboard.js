@@ -58,20 +58,25 @@ function injectMarkerStyles() {
 
 function createContainerMarkerEl(color, priority, vol) {
   const el = document.createElement("div");
-  el.style.cssText = "position:relative;cursor:pointer;width:36px;height:36px;transition:transform 0.2s ease;";
+  // MapLibre usa transform en este nodo raíz para posicionar el marcador; no aplicar scale aquí.
+  el.style.cssText = "width:36px;height:36px;cursor:pointer;";
 
-  el.addEventListener("mouseenter", () => { el.style.transform = "scale(1.3)"; });
-  el.addEventListener("mouseleave", () => { el.style.transform = "scale(1)"; });
+  const inner = document.createElement("div");
+  inner.style.cssText =
+    "position:relative;width:100%;height:100%;transition:transform 0.2s ease;transform-origin:center center;";
 
-  // Pulse ring
+  inner.addEventListener("mouseenter", () => { inner.style.transform = "scale(1.25)"; });
+  inner.addEventListener("mouseleave", () => { inner.style.transform = "scale(1)"; });
+
+  // Pulse ring (solo decorativo)
   const pulse = document.createElement("div");
   pulse.className = "marker-pulse-ring";
   pulse.style.cssText = `
-    position:absolute;inset:-4px;border-radius:50%;opacity:0.6;
+    position:absolute;inset:-4px;border-radius:50%;opacity:0.6;pointer-events:none;
     background:${color};filter:blur(4px);
     animation:${vol >= 80 ? "marker-ping 1.5s cubic-bezier(0,0,0.2,1) infinite" : "marker-pulse 2s ease-in-out infinite"};
   `;
-  el.appendChild(pulse);
+  inner.appendChild(pulse);
 
   // Icon circle
   const badge = document.createElement("div");
@@ -83,21 +88,26 @@ function createContainerMarkerEl(color, priority, vol) {
     background:${color};
   `;
   badge.innerHTML = `
-    <svg style="width:18px;height:18px;color:#fff;" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <svg style="width:18px;height:18px;color:#fff;pointer-events:none;" fill="none" viewBox="0 0 24 24" stroke="currentColor">
       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
     </svg>
   `;
-  el.appendChild(badge);
+  inner.appendChild(badge);
+  el.appendChild(inner);
 
   return el;
 }
 
 function createTruckMarkerEl() {
   const el = document.createElement("div");
-  el.style.cssText = "cursor:pointer;width:38px;height:38px;transition:transform 0.2s ease;";
+  el.style.cssText = "cursor:pointer;width:38px;height:38px;";
 
-  el.addEventListener("mouseenter", () => { el.style.transform = "scale(1.3)"; });
-  el.addEventListener("mouseleave", () => { el.style.transform = "scale(1)"; });
+  const inner = document.createElement("div");
+  inner.style.cssText =
+    "width:100%;height:100%;transition:transform 0.2s ease;transform-origin:center center;";
+
+  inner.addEventListener("mouseenter", () => { inner.style.transform = "scale(1.25)"; });
+  inner.addEventListener("mouseleave", () => { inner.style.transform = "scale(1)"; });
 
   const circle = document.createElement("div");
   circle.style.cssText = `
@@ -107,12 +117,13 @@ function createTruckMarkerEl() {
     box-shadow:0 4px 12px rgba(14,165,233,0.35);
   `;
   circle.innerHTML = `
-    <svg style="width:20px;height:20px;color:#fff;" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <svg style="width:20px;height:20px;color:#fff;pointer-events:none;" fill="none" viewBox="0 0 24 24" stroke="currentColor">
       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17a2 2 0 11-4 0 2 2 0 014 0zM19 17a2 2 0 11-4 0 2 2 0 014 0z" />
       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10M21 16V10a1 1 0 00-1-1h-7m8 7H13" />
     </svg>
   `;
-  el.appendChild(circle);
+  inner.appendChild(circle);
+  el.appendChild(inner);
   return el;
 }
 
@@ -182,6 +193,7 @@ export default function MapDashboard() {
   const [containers, setContainers] = useState([]);
   const [trucks, setTrucks] = useState([]);
   const [selectedContainer, setSelectedContainer] = useState(null);
+  const [mapReady, setMapReady] = useState(false);
   const [loading, setLoading] = useState(true);
 
   // Simulation states
@@ -194,9 +206,12 @@ export default function MapDashboard() {
   const containerMarkersRef = useRef({});
   const truckMarkersRef = useRef({});
   const simTruckMarkerRef = useRef(null);
+  const containersRef = useRef([]);
 
   // Polling trigger
   const [tick, setTick] = useState(0);
+
+  containersRef.current = containers;
 
   // Inject marker CSS on mount
   useEffect(() => {
@@ -306,11 +321,14 @@ export default function MapDashboard() {
           "line-opacity": 0.85,
         },
       });
+
+      setMapReady(true);
     });
 
     return () => {
       map.remove();
       mapInstance.current = null;
+      setMapReady(false);
     };
   }, []);
 
@@ -319,7 +337,7 @@ export default function MapDashboard() {
     const map = mapInstance.current;
     if (!map) return;
 
-    if (!map.isStyleLoaded()) {
+    if (!mapReady || !map.isStyleLoaded()) {
       return;
     }
 
@@ -335,10 +353,13 @@ export default function MapDashboard() {
 
       if (!marker) {
         const el = createContainerMarkerEl(color, priority, vol);
+        el.dataset.containerId = String(c.id);
 
         el.addEventListener("click", (e) => {
           e.stopPropagation();
-          setSelectedContainer(c);
+          const id = parseInt(el.dataset.containerId, 10);
+          const container = containersRef.current.find((item) => item.id === id);
+          if (container) setSelectedContainer(container);
         });
 
         const popup = new maplibregl.Popup({ offset: 20, closeButton: true, maxWidth: "260px" })
@@ -420,7 +441,7 @@ export default function MapDashboard() {
         delete truckMarkersRef.current[id];
       }
     });
-  }, [containers, trucks]);
+  }, [containers, trucks, mapReady]);
 
   // 4. AI Route Optimization Trigger
   const handleOptimizeRoute = async () => {
