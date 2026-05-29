@@ -139,5 +139,14 @@ export function containersRoutes(env: Env): Router {
     }
   });
 
+  router.post("/simulate-telemetry", auth, async (req, res, next) => {
+    try {
+      await containersService.simulateTelemetryForContainers();
+      res.json({ message: "Telemetry simulated successfully for all containers" });
+    } catch (e) {
+      next(e);
+    }
+  });
+
   return router;
 }

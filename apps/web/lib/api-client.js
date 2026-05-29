@@ -73,6 +73,10 @@ export const api = {
       method: "PUT",
       body: JSON.stringify(data),
     }),
+  simulateContainersTelemetry: () =>
+    request("/containers/simulate-telemetry", {
+      method: "POST",
+    }),
   trucksList: () => request("/trucks"),
   truckCreate: (data) =>
     request("/trucks", {
@@ -88,8 +92,37 @@ export const api = {
     request(`/trucks/${id}`, {
       method: "DELETE",
     }),
-  aiOptimizeRoute: () =>
+  aiOptimizeRoute: (body = {}) =>
     request("/ai/optimize-route", {
       method: "POST",
+      body: JSON.stringify(body),
     }),
+  regionsList: () => request("/regions"),
+  regionGet: (id) => request(`/regions/${id}`),
+  regionCreate: (data) =>
+    request("/regions", { method: "POST", body: JSON.stringify(data) }),
+  regionUpdate: (id, data) =>
+    request(`/regions/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  regionDelete: (id) =>
+    request(`/regions/${id}`, { method: "DELETE" }),
+  regionSetZones: (id, zoneIds) =>
+    request(`/regions/${id}/zones`, {
+      method: "PUT",
+      body: JSON.stringify({ zoneIds }),
+    }),
+  zonesList: (params = {}) => {
+    const qs = new URLSearchParams();
+    if (params.regionId) qs.set("regionId", params.regionId);
+    if (params.catalogOnly) qs.set("catalogOnly", "true");
+    const q = qs.toString();
+    return request(`/zones${q ? `?${q}` : ""}`);
+  },
+  zoneGet: (id) => request(`/zones/${id}`),
+  zoneContainers: (id) => request(`/zones/${id}/containers`),
+  zoneCreate: (data) =>
+    request("/zones", { method: "POST", body: JSON.stringify(data) }),
+  zoneUpdate: (id, data) =>
+    request(`/zones/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  zoneDelete: (id) =>
+    request(`/zones/${id}`, { method: "DELETE" }),
 };

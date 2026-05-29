@@ -10,6 +10,7 @@ RUN npm run build
 FROM node:22-alpine
 WORKDIR /app
 ENV NODE_ENV=production
+RUN apk add --no-cache mysql-client netcat-openbsd curl
 COPY --from=base /app/package.json ./
 COPY --from=base /app/node_modules ./node_modules
 COPY --from=base /app/dist ./dist
@@ -18,5 +19,3 @@ COPY --from=base /app/scripts/docker-entrypoint.sh /docker-entrypoint.sh
 RUN sed -i 's/\r$//' /docker-entrypoint.sh && chmod +x /docker-entrypoint.sh
 EXPOSE 4000
 CMD ["sh", "/docker-entrypoint.sh"]
-
-RUN apk add --no-cache mysql-client netcat-openbsd curl
