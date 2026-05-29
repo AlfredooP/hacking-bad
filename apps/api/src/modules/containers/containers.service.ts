@@ -41,23 +41,61 @@ export async function listContainersForMap() {
   }));
 }
 
+function parseCapacityLiters(capacidad: string | null | undefined): number {
+  if (!capacidad) return 0;
+  const match = capacidad.match(/(\d+)/);
+  return match ? parseInt(match[1], 10) : 0;
+}
+
+function average(values: number[]): number | null {
+  if (values.length === 0) return null;
+  return values.reduce((a, b) => a + b, 0) / values.length;
+}
+
 export async function getDashboardStats() {
-  const [total, conIa, alta, totalT, activeT, avgVolRes] = await Promise.all([
-    prisma.contenedor.count(),
-    prisma.resultadoIa.count(),
-    prisma.resultadoIa.count({ where: { prioridad: "alta" } }),
-    prisma.camion.count(),
-    prisma.camion.count({ where: { estado: "Disponible" } }),
-    prisma.resultadoIa.aggregate({ _avg: { volumenPct: true } }),
-  ]);
+  const containers = await listContainersForMap();
+
+  const humedades: number[] = [];
+  const temperaturas: number[] = [];
+  const scores: number[] = [];
+
+  for (const c of containers) {
+    if (c.ultimaLectura?.humedad != null) humedades.push(c.ultimaLectura.humedad);
+    if (c.ultimaLectura?.tempCelsius != null) temperaturas.push(c.ultimaLectura.tempCelsius);
+    if (c.ia?.score != null) scores.push(c.ia.score);
+  }
+
+  const prioridades = { alta: 0, media: 0, baja: 0 };
+  for (const c of containers) {
+    const p = c.ia?.prioridad ?? "baja";
+    if (p in prioridades) prioridades[p as keyof typeof prioridades]++;
+    else prioridades.baja++;
+  }
+
+  const humedadPromedio = average(humedades);
+  const tempPromedio = average(temperaturas);
+  const confianzaIa = scores.length ? (average(scores) ?? 0) * 100 : 0;
 
   return {
-    totalContenedores: total,
-    conClasificacion: conIa,
-    prioridadAlta: alta,
-    totalTrucks: totalT,
-    activeTrucks: activeT,
-    avgVolume: avgVolRes._avg.volumenPct ? Math.round(avgVolRes._avg.volumenPct) : 0,
+    totalContenedores: containers.length,
+    alertasCriticas: prioridades.alta,
+    conClasificacion: containers.filter((c) => c.ia).length,
+    prioridadAlta: prioridades.alta,
+    humedadPromedio: humedadPromedio != null ? Math.round(humedadPromedio * 10) / 10 : null,
+    tempPromedio: tempPromedio != null ? Math.round(tempPromedio * 10) / 10 : null,
+    capacidadTotal: containers.reduce((sum, c) => sum + parseCapacityLiters(c.capacidad), 0),
+    confianzaIa: Math.round(confianzaIa * 10) / 10,
+    charts: {
+      llenado: containers.map((c) => ({
+        label: c.ubicacion || `Contenedor ${c.id}`,
+        value: Math.round(c.ia?.volumenPct ?? 0),
+      })),
+      prioridades: {
+        alta: prioridades.alta,
+        media: prioridades.media,
+        normal: prioridades.baja,
+      },
+    },
   };
 }
 
