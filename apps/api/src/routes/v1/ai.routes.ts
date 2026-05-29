@@ -15,14 +15,17 @@ export function aiRoutes(env: Env): Router {
       const apiTrucks = await listTrucks();
 
       const containers = apiContainers
-        .filter((c) => c.latitud != null && c.longitud != null)
+        .filter((c) => c.latitud != null && c.longitud != null && c.estadoOperativo !== "Inactivo")
         .map((c) => ({
           id: c.id,
           latitud: c.latitud!,
           longitud: c.longitud!,
           volumenPct: c.ia?.volumenPct ?? 0,
-          prioridad: c.ia?.prioridad ?? "baja",
+          prioridad: c.ia?.prioridadEfectiva ?? c.ia?.prioridad ?? "baja",
           tipoResiduo: c.tipoResiduo ?? "Orgánicos",
+          tipoResiduoInferido: c.ia?.tipoResiduoInferido,
+          contaminacionDetectada: c.ia?.contaminacionDetectada ?? false,
+          capacidadMax: c.capacidadMax,
         }));
 
       const trucks = apiTrucks

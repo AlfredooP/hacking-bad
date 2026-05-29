@@ -1,51 +1,151 @@
+import { PrioridadIa, type Contenedor, type Prisma, type ResultadoIa } from "@prisma/client";
 import { prisma } from "../../lib/prisma.js";
+import { maxPriority, parseAllowedTypes } from "./waste-types.js";
 
-export async function listContainersForMap() {
-  const contenedores = await prisma.contenedor.findMany({
+type ContainerWithRelations = Contenedor & {
+  resultadoIa: ResultadoIa | null;
+  sensores: {
+    idSensor: number;
+    tipoSensor: string | null;
+    lecturas: {
+      idLectura: number;
+      fechaHora: Date | null;
+      tempCelsius: number | null;
+      humedad: number | null;
+      densidad: number | null;
+      distanciaBoteTapa: number | null;
+      pesoKg: number | null;
+    }[];
+  }[];
+};
+
+const containerInclude = {
+  resultadoIa: true,
+  sensores: {
     include: {
-      resultadoIa: true,
-      sensores: {
-        include: {
-          lecturas: {
-            orderBy: { fechaHora: "desc" },
-            take: 1,
-          },
-        },
+      lecturas: {
+        orderBy: { fechaHora: "desc" as const },
+        take: 1,
       },
     },
-  });
+  },
+};
 
-  return contenedores.map((c) => ({
+function parseCapacidadLitros(c: Contenedor): number | null {
+  if (c.capacidadMax && c.capacidadMax > 0) return c.capacidadMax;
+  const capMatch = c.capacidad?.match(/(\d+)/);
+  return capMatch ? parseInt(capMatch[1], 10) : null;
+}
+
+function formatContainer(c: ContainerWithRelations) {
+  const ultimaLectura = c.sensores
+    .flatMap((s) => s.lecturas)
+    .sort((a, b) => {
+      const ta = a.fechaHora?.getTime() ?? 0;
+      const tb = b.fechaHora?.getTime() ?? 0;
+      return tb - ta;
+    })[0] ?? null;
+
+  const iaPrioridad = c.resultadoIa?.prioridad ?? "baja";
+  const prioridadEfectiva = c.resultadoIa?.contaminacionDetectada
+    ? "alta"
+    : maxPriority(iaPrioridad, c.prioridadConfigurada);
+
+  return {
     id: c.idContenedor,
+    nombre: c.nombre,
     ubicacion: c.ubicacion,
+    zona: c.zona,
     latitud: c.latitud ? Number(c.latitud) : null,
     longitud: c.longitud ? Number(c.longitud) : null,
     capacidad: c.capacidad,
+    capacidadMax: c.capacidadMax,
     estado: c.estado,
+    estadoOperativo: c.estadoOperativo,
     tipoResiduo: c.tipoResiduo,
+    tiposResiduosPermitidos: parseAllowedTypes(c.tiposResiduosPermitidos),
+    prioridadConfigurada: c.prioridadConfigurada,
+    sensores: c.sensores.map((s) => ({
+      id: s.idSensor,
+      tipo: s.tipoSensor,
+    })),
     ia: c.resultadoIa
       ? {
           prioridad: c.resultadoIa.prioridad,
+          prioridadEfectiva,
           score: c.resultadoIa.score,
           volumenPct: c.resultadoIa.volumenPct,
+          densidad: c.resultadoIa.densidad,
+          tipoResiduoInferido: c.resultadoIa.tipoResiduoInferido,
+          confianzaInferencia: c.resultadoIa.confianzaInferencia,
+          contaminacionDetectada: c.resultadoIa.contaminacionDetectada,
+          mensajeContaminacion: c.resultadoIa.mensajeContaminacion,
           fechaClasificacion: c.resultadoIa.fechaClasificacion,
         }
       : null,
-    ultimaLectura: c.sensores
-      .flatMap((s) => s.lecturas)
-      .sort((a, b) => {
-        const ta = a.fechaHora?.getTime() ?? 0;
-        const tb = b.fechaHora?.getTime() ?? 0;
-        return tb - ta;
-      })[0] ?? null,
-  }));
+    ultimaLectura: ultimaLectura
+      ? {
+          tempCelsius: ultimaLectura.tempCelsius,
+          humedad: ultimaLectura.humedad,
+          densidad: ultimaLectura.densidad,
+          distanciaBoteTapa: ultimaLectura.distanciaBoteTapa,
+          pesoKg: ultimaLectura.pesoKg,
+          fechaHora: ultimaLectura.fechaHora,
+        }
+      : null,
+  };
+}
+
+export async function listContainersForMap(filters?: {
+  zona?: string;
+  tipoResiduo?: string;
+  prioridad?: string;
+  soloContaminacion?: boolean;
+}) {
+  const contenedores = await prisma.contenedor.findMany({
+    include: containerInclude,
+    orderBy: { idContenedor: "asc" },
+  });
+
+  let formatted = contenedores.map(formatContainer);
+
+  if (filters?.zona) {
+    formatted = formatted.filter((c) => c.zona === filters.zona);
+  }
+  if (filters?.tipoResiduo) {
+    const t = filters.tipoResiduo.toLowerCase();
+    formatted = formatted.filter(
+      (c) =>
+        c.tipoResiduo?.toLowerCase() === t ||
+        c.ia?.tipoResiduoInferido?.toLowerCase() === t ||
+        c.tiposResiduosPermitidos.some((p) => p.toLowerCase() === t)
+    );
+  }
+  if (filters?.prioridad) {
+    formatted = formatted.filter((c) => c.ia?.prioridadEfectiva === filters.prioridad);
+  }
+  if (filters?.soloContaminacion) {
+    formatted = formatted.filter((c) => c.ia?.contaminacionDetectada);
+  }
+
+  return formatted;
+}
+
+export async function getContainerById(id: number) {
+  const c = await prisma.contenedor.findUnique({
+    where: { idContenedor: id },
+    include: containerInclude,
+  });
+  if (!c) return null;
+  return formatContainer(c);
 }
 
 export async function getDashboardStats() {
-  const [total, conIa, alta, totalT, activeT, avgVolRes] = await Promise.all([
+  const [total, conIa, alta, contaminacion, totalT, activeT, avgVolRes] = await Promise.all([
     prisma.contenedor.count(),
     prisma.resultadoIa.count(),
     prisma.resultadoIa.count({ where: { prioridad: "alta" } }),
+    prisma.resultadoIa.count({ where: { contaminacionDetectada: true } }),
     prisma.camion.count(),
     prisma.camion.count({ where: { estado: "Disponible" } }),
     prisma.resultadoIa.aggregate({ _avg: { volumenPct: true } }),
@@ -55,33 +155,198 @@ export async function getDashboardStats() {
     totalContenedores: total,
     conClasificacion: conIa,
     prioridadAlta: alta,
+    alertasContaminacion: contaminacion,
     totalTrucks: totalT,
     activeTrucks: activeT,
     avgVolume: avgVolRes._avg.volumenPct ? Math.round(avgVolRes._avg.volumenPct) : 0,
   };
 }
 
-export async function updateContainer(id: number, data: { estado?: string; tipoResiduo?: string; latitud?: number; longitud?: number; capacidad?: string }) {
-  return prisma.contenedor.update({
-    where: { idContenedor: id },
+export interface CreateContainerInput {
+  nombre: string;
+  ubicacion?: string;
+  zona?: string;
+  latitud?: number;
+  longitud?: number;
+  capacidadMax?: number;
+  estado?: string;
+  estadoOperativo?: string;
+  tipoResiduo?: string;
+  tiposResiduosPermitidos?: string[];
+  prioridadConfigurada?: PrioridadIa;
+  sensores?: { tipoSensor: string }[];
+}
+
+export async function createContainer(data: CreateContainerInput) {
+  const capacidadLabel = data.capacidadMax ? `${data.capacidadMax}L` : "200L";
+  const allowed = data.tiposResiduosPermitidos?.length
+    ? data.tiposResiduosPermitidos.join(",")
+    : data.tipoResiduo ?? "Orgánicos";
+
+  const container = await prisma.contenedor.create({
     data: {
-      estado: data.estado,
-      tipoResiduo: data.tipoResiduo,
+      nombre: data.nombre,
+      ubicacion: data.ubicacion ?? data.nombre,
+      zona: data.zona,
       latitud: data.latitud,
       longitud: data.longitud,
-      capacidad: data.capacidad,
+      capacidad: capacidadLabel,
+      capacidadMax: data.capacidadMax ?? 200,
+      estado: data.estado ?? "Vacío",
+      estadoOperativo: data.estadoOperativo ?? "Activo",
+      tipoResiduo: data.tipoResiduo ?? "Orgánicos",
+      tiposResiduosPermitidos: allowed,
+      prioridadConfigurada: data.prioridadConfigurada,
+      sensores: data.sensores?.length
+        ? {
+            create: data.sensores.map((s) => ({ tipoSensor: s.tipoSensor })),
+          }
+        : {
+            create: [{ tipoSensor: "Multisensor" }],
+          },
     },
+    include: containerInclude,
+  });
+
+  return formatContainer(container);
+}
+
+export interface UpdateContainerInput {
+  nombre?: string;
+  ubicacion?: string;
+  zona?: string;
+  latitud?: number;
+  longitud?: number;
+  capacidadMax?: number;
+  estado?: string;
+  estadoOperativo?: string;
+  tipoResiduo?: string;
+  tiposResiduosPermitidos?: string[];
+  prioridadConfigurada?: PrioridadIa | null;
+}
+
+export async function updateContainer(id: number, data: UpdateContainerInput) {
+  const updateData: Prisma.ContenedorUpdateInput = {};
+
+  if (data.nombre !== undefined) updateData.nombre = data.nombre;
+  if (data.ubicacion !== undefined) updateData.ubicacion = data.ubicacion;
+  if (data.zona !== undefined) updateData.zona = data.zona;
+  if (data.latitud !== undefined) updateData.latitud = data.latitud;
+  if (data.longitud !== undefined) updateData.longitud = data.longitud;
+  if (data.capacidadMax !== undefined) {
+    updateData.capacidadMax = data.capacidadMax;
+    updateData.capacidad = `${data.capacidadMax}L`;
+  }
+  if (data.estado !== undefined) updateData.estado = data.estado;
+  if (data.estadoOperativo !== undefined) updateData.estadoOperativo = data.estadoOperativo;
+  if (data.tipoResiduo !== undefined) updateData.tipoResiduo = data.tipoResiduo;
+  if (data.tiposResiduosPermitidos !== undefined) {
+    updateData.tiposResiduosPermitidos = data.tiposResiduosPermitidos.join(",");
+  }
+  if (data.prioridadConfigurada !== undefined) {
+    updateData.prioridadConfigurada = data.prioridadConfigurada;
+  }
+
+  const updated = await prisma.contenedor.update({
+    where: { idContenedor: id },
+    data: updateData,
+    include: containerInclude,
+  });
+
+  return formatContainer(updated);
+}
+
+export async function deleteContainer(id: number) {
+  await prisma.contenedor.delete({ where: { idContenedor: id } });
+}
+
+export async function listContaminationAlerts(resueltas?: boolean) {
+  return prisma.alertaContaminacion.findMany({
+    where: resueltas !== undefined ? { resuelta: resueltas } : undefined,
+    include: {
+      contenedor: {
+        select: { idContenedor: true, nombre: true, ubicacion: true, zona: true },
+      },
+    },
+    orderBy: { fechaDeteccion: "desc" },
+    take: 50,
   });
 }
 
+export async function resolveContaminationAlert(alertId: number) {
+  return prisma.alertaContaminacion.update({
+    where: { id: alertId },
+    data: { resuelta: true },
+  });
+}
+
+export async function persistClassificationResult(
+  containerId: number,
+  r: {
+    prioridad: string;
+    score: number;
+    volumenPct: number;
+    temperatura?: number | null;
+    humedad?: number | null;
+    densidad?: number | null;
+    pesoKg?: number | null;
+    tipoResiduoInferido?: string | null;
+    confianzaInferencia?: number | null;
+    contaminacionDetectada?: boolean;
+    mensajeContaminacion?: string | null;
+  },
+  container: Contenedor
+) {
+  await prisma.resultadoIa.upsert({
+    where: { idContenedor: containerId },
+    create: {
+      idContenedor: containerId,
+      prioridad: r.prioridad as PrioridadIa,
+      score: r.score,
+      volumenPct: r.volumenPct,
+      temperatura: r.temperatura ?? undefined,
+      humedad: r.humedad ?? undefined,
+      densidad: r.densidad ?? undefined,
+      pesoKg: r.pesoKg ?? undefined,
+      tipoResiduoInferido: r.tipoResiduoInferido ?? undefined,
+      confianzaInferencia: r.confianzaInferencia ?? undefined,
+      contaminacionDetectada: r.contaminacionDetectada ?? false,
+      mensajeContaminacion: r.mensajeContaminacion ?? undefined,
+    },
+    update: {
+      prioridad: r.prioridad as PrioridadIa,
+      score: r.score,
+      volumenPct: r.volumenPct,
+      temperatura: r.temperatura ?? undefined,
+      humedad: r.humedad ?? undefined,
+      densidad: r.densidad ?? undefined,
+      pesoKg: r.pesoKg ?? undefined,
+      tipoResiduoInferido: r.tipoResiduoInferido ?? undefined,
+      confianzaInferencia: r.confianzaInferencia ?? undefined,
+      contaminacionDetectada: r.contaminacionDetectada ?? false,
+      mensajeContaminacion: r.mensajeContaminacion ?? undefined,
+      fechaClasificacion: new Date(),
+    },
+  });
+
+  if (r.contaminacionDetectada && r.tipoResiduoInferido) {
+    await prisma.alertaContaminacion.create({
+      data: {
+        idContenedor: containerId,
+        tipoEsperado: container.tipoResiduo,
+        tipoInferido: r.tipoResiduoInferido,
+        mensaje: r.mensajeContaminacion,
+      },
+    });
+  }
+}
+
 export async function emptyContainer(id: number) {
-  // Update state to "Vacío"
   await prisma.contenedor.update({
     where: { idContenedor: id },
     data: { estado: "Vacío" },
   });
 
-  // Update AI results to 0% volume and low priority
   await prisma.resultadoIa.upsert({
     where: { idContenedor: id },
     create: {
@@ -92,14 +357,23 @@ export async function emptyContainer(id: number) {
       temperatura: 20.0,
       humedad: 40.0,
       pesoKg: 0.0,
+      contaminacionDetectada: false,
+      mensajeContaminacion: null,
+      tipoResiduoInferido: null,
     },
     update: {
       prioridad: "baja",
       score: 1.0,
       volumenPct: 0.0,
       pesoKg: 0.0,
+      contaminacionDetectada: false,
+      mensajeContaminacion: null,
+      tipoResiduoInferido: null,
       fechaClasificacion: new Date(),
     },
   });
 }
 
+export function getCapacidadLitros(c: Contenedor): number | null {
+  return parseCapacidadLitros(c);
+}

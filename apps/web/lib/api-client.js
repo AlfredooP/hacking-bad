@@ -30,7 +30,43 @@ export const api = {
     }),
   logout: () => request("/auth/logout", { method: "POST" }),
   me: () => request("/auth/me"),
-  containersMap: () => request("/containers/map"),
+  containersMap: (params = {}) => {
+    const qs = new URLSearchParams();
+    if (params.zona) qs.set("zona", params.zona);
+    if (params.tipoResiduo) qs.set("tipoResiduo", params.tipoResiduo);
+    if (params.prioridad) qs.set("prioridad", params.prioridad);
+    if (params.soloContaminacion) qs.set("soloContaminacion", "true");
+    const q = qs.toString();
+    return request(`/containers/map${q ? `?${q}` : ""}`);
+  },
+  containersList: (params = {}) => {
+    const qs = new URLSearchParams();
+    if (params.zona) qs.set("zona", params.zona);
+    if (params.tipoResiduo) qs.set("tipoResiduo", params.tipoResiduo);
+    if (params.prioridad) qs.set("prioridad", params.prioridad);
+    if (params.soloContaminacion) qs.set("soloContaminacion", "true");
+    const q = qs.toString();
+    return request(`/containers${q ? `?${q}` : ""}`);
+  },
+  containerGet: (id) => request(`/containers/${id}`),
+  containerCreate: (data) =>
+    request("/containers", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  containerDelete: (id) =>
+    request(`/containers/${id}`, {
+      method: "DELETE",
+    }),
+  containerAlerts: (params = {}) => {
+    const qs = new URLSearchParams();
+    if (params.resueltas === true) qs.set("resueltas", "true");
+    if (params.resueltas === false) qs.set("resueltas", "false");
+    const q = qs.toString();
+    return request(`/containers/alerts${q ? `?${q}` : ""}`);
+  },
+  containerAlertResolve: (id) =>
+    request(`/containers/alerts/${id}/resolve`, { method: "PATCH" }),
   dashboardStats: () => request("/containers/stats"),
   containerUpdate: (id, data) =>
     request(`/containers/${id}`, {
