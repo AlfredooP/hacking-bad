@@ -22,6 +22,20 @@ docker compose up --build
 - API health: http://localhost/api/health
 - Usuario demo: `admin@bin.local` / `password123`
 
+### Si el contenedor `api` no arranca
+
+Las tablas `Regiones` / `Zonas` se crean solo con **Prisma** al iniciar la API (no en scripts MySQL init).
+
+1. Ver el error: `docker compose logs api --tail 80`
+2. **Desarrollo (borrar datos):** `docker compose down -v` y luego `docker compose up --build`
+3. **Conservar datos** (migración fallida P3009 o tablas de un init antiguo):
+   ```bash
+   docker compose run --rm api npx prisma migrate resolve --applied 20260529120000_zones_regions
+   # si la migración quedó a medias sin tablas:
+   # docker compose run --rm api npx prisma migrate resolve --rolled-back 20260529120000_zones_regions
+   docker compose up --build
+   ```
+
 ## Estructura
 
 ```

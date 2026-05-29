@@ -9,6 +9,7 @@ datasource db {
 
 model Camion {
   idCamion            Int      @id @default(autoincrement()) @map("id_camion")
+  idRegion            String?  @map("id_region") @db.VarChar(191)
   placa               String?  @db.VarChar(20)
   capacidad           String?  @db.VarChar(20)
   capacidadMax        Float?   @map("capacidad_max")
@@ -18,8 +19,44 @@ model Camion {
   longitud            Decimal? @db.Decimal(10, 6)
   tipoResiduos        String?  @map("tipo_residuos") @db.VarChar(255)
   rutas               Ruta[]
+  region              Region?  @relation(fields: [idRegion], references: [idRegion], onDelete: SetNull)
 
+  @@index([idRegion])
   @@map("Camiones")
+}
+
+model Region {
+  idRegion    String   @id @default(cuid()) @map("id_region")
+  nombre      String   @db.VarChar(100)
+  metadata    Json?
+  kpis        Json?
+  simSettings Json?    @map("sim_settings")
+  zones       Zone[]
+  camiones    Camion[]
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("Regiones")
+}
+
+model Zone {
+  idZone               String   @id @default(cuid()) @map("id_zone")
+  idRegion             String?  @map("id_region")
+  nombre               String   @db.VarChar(100)
+  status               String   @default("active") @db.VarChar(20)
+  geometry             Json
+  centroidLng          Decimal? @map("centroid_lng") @db.Decimal(10, 6)
+  centroidLat          Decimal? @map("centroid_lat") @db.Decimal(10, 6)
+  areaSqM              Float?   @map("area_sq_m")
+  wasteMetadata        Json?    @map("waste_metadata")
+  assignedVehicleIds   Json?    @map("assigned_vehicle_ids")
+  region               Region?  @relation(fields: [idRegion], references: [idRegion], onDelete: SetNull)
+  contenedores         Contenedor[]
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+
+  @@index([idRegion])
+  @@map("Zonas")
 }
 
 model Contenedor {
@@ -27,6 +64,8 @@ model Contenedor {
   nombre                    String?                @db.VarChar(100)
   ubicacion                 String?                @db.VarChar(100)
   zona                      String?                @db.VarChar(50)
+  idZone                    String?                @map("id_zone")
+  zone                      Zone?                  @relation(fields: [idZone], references: [idZone], onDelete: SetNull)
   latitud                   Decimal?               @db.Decimal(10, 6)
   longitud                  Decimal?               @db.Decimal(10, 6)
   capacidad                 String?                @db.VarChar(20)
@@ -41,6 +80,7 @@ model Contenedor {
   rutaContenedores          RutaContenedor[]
   alertasContaminacion      AlertaContaminacion[]
 
+  @@index([idZone])
   @@map("Contenedores")
 }
 

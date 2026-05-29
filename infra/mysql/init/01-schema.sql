@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS `Camiones` (
   `longitud` decimal(10,6) DEFAULT NULL,
   `tipo_residuos` varchar(255) DEFAULT NULL,
   PRIMARY KEY (`id_camion`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `Contenedores` (
   `id_contenedor` int NOT NULL AUTO_INCREMENT,
@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS `Contenedores` (
   `estado` varchar(20) DEFAULT NULL,
   `tipo_residuo` varchar(50) DEFAULT NULL,
   PRIMARY KEY (`id_contenedor`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `Sensores` (
   `id_sensor` int NOT NULL AUTO_INCREMENT,
@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS `Sensores` (
   PRIMARY KEY (`id_sensor`),
   KEY `id_contenedor` (`id_contenedor`),
   CONSTRAINT `Sensores_ibfk_1` FOREIGN KEY (`id_contenedor`) REFERENCES `Contenedores` (`id_contenedor`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `LecturasSensores` (
   `id_lectura` int NOT NULL AUTO_INCREMENT,
@@ -45,7 +45,7 @@ CREATE TABLE IF NOT EXISTS `LecturasSensores` (
   PRIMARY KEY (`id_lectura`),
   KEY `idx_sensor_fecha` (`id_sensor`,`fecha_hora`),
   CONSTRAINT `LecturasSensores_ibfk_1` FOREIGN KEY (`id_sensor`) REFERENCES `Sensores` (`id_sensor`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `ReportesCiudadanos` (
   `id_reporte` int NOT NULL AUTO_INCREMENT,
@@ -55,7 +55,7 @@ CREATE TABLE IF NOT EXISTS `ReportesCiudadanos` (
   `longitud` decimal(10,6) DEFAULT NULL,
   `fecha` datetime DEFAULT NULL,
   PRIMARY KEY (`id_reporte`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `ResultadosIA` (
   `id` int NOT NULL AUTO_INCREMENT,
@@ -71,7 +71,7 @@ CREATE TABLE IF NOT EXISTS `ResultadosIA` (
   KEY `fk_ria_contenedor` (`id_contenedor`),
   KEY `idx_ria_prioridad` (`prioridad`,`fecha_clasificacion` DESC),
   CONSTRAINT `fk_ria_contenedor` FOREIGN KEY (`id_contenedor`) REFERENCES `Contenedores` (`id_contenedor`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `Rutas` (
   `id_ruta` int NOT NULL AUTO_INCREMENT,
@@ -81,7 +81,7 @@ CREATE TABLE IF NOT EXISTS `Rutas` (
   PRIMARY KEY (`id_ruta`),
   KEY `id_camion` (`id_camion`),
   CONSTRAINT `Rutas_ibfk_1` FOREIGN KEY (`id_camion`) REFERENCES `Camiones` (`id_camion`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `RutaContenedores` (
   `id_ruta` int NOT NULL,
@@ -91,7 +91,7 @@ CREATE TABLE IF NOT EXISTS `RutaContenedores` (
   KEY `id_contenedor` (`id_contenedor`),
   CONSTRAINT `RutaContenedores_ibfk_1` FOREIGN KEY (`id_ruta`) REFERENCES `Rutas` (`id_ruta`),
   CONSTRAINT `RutaContenedores_ibfk_2` FOREIGN KEY (`id_contenedor`) REFERENCES `Contenedores` (`id_contenedor`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `Usuarios` (
   `id_usuario` int NOT NULL AUTO_INCREMENT,
@@ -101,7 +101,7 @@ CREATE TABLE IF NOT EXISTS `Usuarios` (
   `rol` varchar(50) NOT NULL,
   PRIMARY KEY (`id_usuario`),
   UNIQUE KEY `email` (`email`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT IGNORE INTO `Contenedores` (`id_contenedor`, `ubicacion`, `latitud`, `longitud`, `capacidad`, `estado`, `tipo_residuo`) VALUES
 (1,'Edificio 19',25.533254,-103.436151,'200L','Lleno','Orgánicos'),

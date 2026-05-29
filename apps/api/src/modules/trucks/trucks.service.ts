@@ -12,6 +12,7 @@ export async function listTrucks() {
     latitud: t.latitud ? Number(t.latitud) : null,
     longitud: t.longitud ? Number(t.longitud) : null,
     tipoResiduos: t.tipoResiduos,
+    idRegion: t.idRegion,
   }));
 }
 
@@ -24,6 +25,7 @@ export async function createTruck(data: {
   latitud?: number;
   longitud?: number;
   tipoResiduos: string;
+  idRegion?: string;
 }) {
   return prisma.camion.create({
     data: {
@@ -35,6 +37,7 @@ export async function createTruck(data: {
       latitud: data.latitud ?? null,
       longitud: data.longitud ?? null,
       tipoResiduos: data.tipoResiduos,
+      idRegion: data.idRegion ?? null,
     },
   });
 }
@@ -50,6 +53,7 @@ export async function updateTruck(
     latitud?: number;
     longitud?: number;
     tipoResiduos?: string;
+    idRegion?: string | null;
   }
 ) {
   return prisma.camion.update({
@@ -63,6 +67,7 @@ export async function updateTruck(
       latitud: data.latitud,
       longitud: data.longitud,
       tipoResiduos: data.tipoResiduos,
+      idRegion: data.idRegion !== undefined ? data.idRegion : undefined,
     },
   });
 }

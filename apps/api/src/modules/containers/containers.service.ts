@@ -56,6 +56,7 @@ function formatContainer(c: ContainerWithRelations) {
     nombre: c.nombre,
     ubicacion: c.ubicacion,
     zona: c.zona,
+    idZone: c.idZone ?? null,
     latitud: c.latitud ? Number(c.latitud) : null,
     longitud: c.longitud ? Number(c.longitud) : null,
     capacidad: c.capacidad,
@@ -376,4 +377,120 @@ export async function emptyContainer(id: number) {
 
 export function getCapacidadLitros(c: Contenedor): number | null {
   return parseCapacidadLitros(c);
+}
+
+export async function simulateTelemetryForContainers() {
+  const containers = await prisma.contenedor.findMany({
+    include: {
+      sensores: true,
+    },
+  });
+
+  const now = new Date();
+
+  for (const c of containers) {
+    // Make sure a sensor exists for this container
+    let sensor = c.sensores[0];
+    if (!sensor) {
+      sensor = await prisma.sensor.create({
+        data: {
+          idContenedor: c.idContenedor,
+          tipoSensor: "Multisensor",
+        },
+      });
+    }
+
+    // Generate 10 historical readings for the past 20 hours (one every 2 hours)
+    for (let i = 9; i >= 0; i--) {
+      const fechaHora = new Date(now.getTime() - i * 2 * 60 * 60 * 1000);
+      
+      // Random values
+      const tempCelsius = 18.0 + Math.random() * 15.0;
+      const humedad = 40.0 + Math.random() * 40.0;
+      const volumenPct = Math.min(100, Math.max(0, Math.round(10 + (9 - i) * 8 + (Math.random() * 15 - 7.5)))); // slowly fills up over time
+      const capMax = c.capacidadMax ?? 200;
+      const pesoKg = Math.round(((volumenPct / 100) * (capMax * 0.12) + Math.random() * 2.0) * 100) / 100;
+      const distanciaBoteTapa = Math.round((80.0 - (volumenPct / 100) * 75.0) * 100) / 100; // 80cm empty, 5cm full
+
+      // Create raw sensor reading
+      await prisma.lecturaSensor.create({
+        data: {
+          idSensor: sensor.idSensor,
+          fechaHora,
+          tempCelsius,
+          humedad,
+          distanciaBoteTapa,
+          pesoKg,
+          densidad: pesoKg / ((volumenPct || 1) * capMax / 100),
+        },
+      });
+
+      // For the latest reading (i = 0), update current IA status
+      if (i === 0) {
+        const contaminacionDetectada = Math.random() < 0.15; // 15% chance
+        const tipoResiduoInferido = contaminacionDetectada
+          ? (c.tipoResiduo === "Orgánicos" ? "Reciclables" : "Orgánicos")
+          : c.tipoResiduo;
+        const mensajeContaminacion = contaminacionDetectada
+          ? "Mezcla de materiales plásticos detectada"
+          : null;
+        
+        const prioridad = volumenPct >= 80 ? "alta" : volumenPct >= 45 ? "media" : "baja";
+
+        await prisma.resultadoIa.upsert({
+          where: { idContenedor: c.idContenedor },
+          create: {
+            idContenedor: c.idContenedor,
+            prioridad: prioridad as PrioridadIa,
+            score: Math.round((0.85 + Math.random() * 0.15) * 100) / 100,
+            volumenPct,
+            temperatura: tempCelsius,
+            humedad,
+            pesoKg,
+            densidad: pesoKg / ((volumenPct || 1) * capMax / 100),
+            tipoResiduoInferido,
+            confianzaInferencia: Math.round((0.75 + Math.random() * 0.23) * 100) / 100,
+            contaminacionDetectada,
+            mensajeContaminacion,
+          },
+          update: {
+            prioridad: prioridad as PrioridadIa,
+            score: Math.round((0.85 + Math.random() * 0.15) * 100) / 100,
+            volumenPct,
+            temperatura: tempCelsius,
+            humedad,
+            pesoKg,
+            densidad: pesoKg / ((volumenPct || 1) * capMax / 100),
+            tipoResiduoInferido,
+            confianzaInferencia: Math.round((0.75 + Math.random() * 0.23) * 100) / 100,
+            contaminacionDetectada,
+            mensajeContaminacion,
+            fechaClasificacion: new Date(),
+          },
+        });
+
+        // Update container status label corresponding to volume
+        let estado = "Vacío";
+        if (volumenPct >= 80) estado = "Lleno";
+        else if (volumenPct >= 35) estado = "Medio";
+
+        await prisma.contenedor.update({
+          where: { idContenedor: c.idContenedor },
+          data: { estado },
+        });
+
+        // Add contamination alert
+        if (contaminacionDetectada && tipoResiduoInferido) {
+          await prisma.alertaContaminacion.create({
+            data: {
+              idContenedor: c.idContenedor,
+              tipoEsperado: c.tipoResiduo,
+              tipoInferido: tipoResiduoInferido,
+              mensaje: mensajeContaminacion,
+            },
+          });
+        }
+      }
+    }
+  }
 }
