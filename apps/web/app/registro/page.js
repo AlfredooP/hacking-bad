@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { api } from "@/lib/api-client";
+import { BrandLogo } from "@/components/layout/BrandLogo";
 
 export default function RegistroPage() {
   const router = useRouter();
@@ -29,9 +30,12 @@ export default function RegistroPage() {
   }
 
   return (
-    <main className="min-h-screen flex items-center justify-center p-4">
-      <form onSubmit={handleSubmit} className="card w-full max-w-md space-y-4">
-        <h1 className="text-2xl font-bold">Crear cuenta</h1>
+    <main className="min-h-screen flex flex-col items-center justify-center p-4 bg-[var(--bg)]">
+      <div className="mb-6">
+        <BrandLogo size="lg" href="/" />
+      </div>
+      <form onSubmit={handleSubmit} className="card w-full max-w-md space-y-4 border-slate-800">
+        <h1 className="text-2xl font-bold text-white">Crear cuenta</h1>
         {error && <p className="text-red-400 text-sm">{error}</p>}
         <div>
           <label className="block text-sm text-slate-400 mb-1">Nombre</label>

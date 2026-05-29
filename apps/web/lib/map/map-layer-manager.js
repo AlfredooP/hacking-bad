@@ -28,7 +28,7 @@ export class MapLayerManager {
   }
 
   /** @param {Array<object>} zones - API zone objects with geometry */
-  setZones(zones = []) {
+  setZones(zones = [], { onZoneClick } = {}) {
     this.groups.zones.clearLayers();
     zones.forEach((zone) => {
       if (!zone.geometry) return;
@@ -42,6 +42,12 @@ export class MapLayerManager {
           },
           onEachFeature: (feature, l) => {
             l.bindTooltip(zone.nombre || "Zona", { sticky: true });
+            if (onZoneClick) {
+              l.on("click", (ev) => {
+                L.DomEvent.stopPropagation(ev);
+                onZoneClick(zone);
+              });
+            }
           },
         }
       );
@@ -145,6 +151,7 @@ export class MapLayerManager {
       this.truckMarkers[t.id] = marker;
     } else {
       marker.setLatLng(latLng);
+      marker.setIcon(icon);
       marker.setPopupContent(popupHtml);
     }
     return marker;

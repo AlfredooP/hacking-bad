@@ -73,7 +73,7 @@ function CollapsibleHeader({ title, isOpen, onToggle, count }) {
   );
 }
 
-export default function MapDashboard() {
+export default function MapDashboard({ canManage = false }) {
   const mapRef = useRef(null);
   const mapInstance = useRef(null);
   const layerManagerRef = useRef(null);
@@ -93,6 +93,8 @@ export default function MapDashboard() {
   const [selectedZoneId, setSelectedZoneId] = useState(null);
   const [mapReady, setMapReady] = useState(false);
   const [viewMode, setViewMode] = useState("region"); // "region" or "zone"
+  const [showZonePolygons, setShowZonePolygons] = useState(true);
+  const [selectedZoneDetail, setSelectedZoneDetail] = useState(null);
   const [loading, setLoading] = useState(true);
   const [drawingState, setDrawingState] = useState("idle");
   const [drawError, setDrawError] = useState("");
@@ -342,18 +344,46 @@ export default function MapDashboard() {
   }, [viewMode, containers, selectedRegionId, selectedZoneId, zones]);
 
   const visibleTrucks = useMemo(() => {
+    const withCoords = trucks.filter(
+      (t) => t.latitud != null && t.longitud != null && !Number.isNaN(Number(t.latitud))
+    );
+
     let targetRegionId = "";
     if (viewMode === "region") {
       targetRegionId = selectedRegionId;
     } else {
-      // viewMode === "zone"
       const activeZone = zoneCatalog.find((z) => z.id === selectedZoneId);
       targetRegionId = activeZone?.idRegion ?? "";
     }
 
-    if (!targetRegionId) return [];
-    return trucks.filter((t) => t.idRegion === targetRegionId);
+    if (!targetRegionId) return withCoords;
+
+    return withCoords.filter(
+      (t) => t.idRegion === targetRegionId || t.idRegion == null || t.idRegion === ""
+    );
   }, [viewMode, trucks, selectedRegionId, selectedZoneId, zoneCatalog]);
+
+  const selectedRegionSummary = useMemo(() => {
+    if (!selectedRegionId) return null;
+    const region = regions.find((r) => r.id === selectedRegionId);
+    const regionZones = zones.filter((z) => z.idRegion === selectedRegionId || regionZoneIds.includes(z.id));
+    const regionContainers = visibleContainers;
+    const avgVol =
+      regionContainers.length > 0
+        ? Math.round(
+            regionContainers.reduce((s, c) => s + (c.ia?.volumenPct ?? 0), 0) / regionContainers.length
+          )
+        : 0;
+    const contamination = regionContainers.filter((c) => c.ia?.contaminacionDetectada).length;
+    return {
+      region,
+      zoneCount: regionZones.length,
+      containerCount: regionContainers.length,
+      truckCount: visibleTrucks.length,
+      avgVol,
+      contamination,
+    };
+  }, [selectedRegionId, regions, zones, regionZoneIds, visibleContainers, visibleTrucks]);
 
   useEffect(() => {
     if (!mapReady || !layerManagerRef.current) return;
@@ -379,8 +409,17 @@ export default function MapDashboard() {
   useEffect(() => {
     if (!layerManagerRef.current) return;
     layerManagerRef.current.setSelectedZone(selectedZoneId);
-    layerManagerRef.current.setZones(visibleZones);
-  }, [visibleZones, selectedZoneId]);
+    const zonesToDraw = viewMode === "region" && !showZonePolygons ? [] : visibleZones;
+    layerManagerRef.current.setZones(zonesToDraw, {
+      onZoneClick: (zone) => {
+        setSelectedZoneDetail(zone);
+        setSelectedZoneId(zone.id);
+        if (viewMode === "region") {
+          layerManagerRef.current?.focusZone(zone);
+        }
+      },
+    });
+  }, [visibleZones, selectedZoneId, showZonePolygons, viewMode]);
 
   useEffect(() => {
     if (mapInstance.current && selectedRegionId) {
@@ -466,7 +505,7 @@ export default function MapDashboard() {
         latitud: clickedLatLng.lat,
         longitud: clickedLatLng.lng,
         tipoResiduos: truckForm.tipoResiduos.join(","),
-        idRegion: truckForm.idRegion || null,
+        idRegion: truckForm.idRegion || selectedRegionId || null,
       });
 
       setTruckModalOpen(false);
@@ -994,8 +1033,8 @@ export default function MapDashboard() {
       >
         <div className="space-y-4 flex-1">
           <div>
-            <h3 className="text-lg font-bold text-white tracking-tight">Gestión Inteligente</h3>
-            <p className="text-slate-400 text-[11px] mt-0.5">Zonas, flota y optimización IA</p>
+            <h3 className="text-lg font-bold text-white tracking-tight">ATLAS WASTE · Mapa</h3>
+            <p className="text-slate-400 text-[11px] mt-0.5">Regiones, zonas, flota y optimización IA</p>
           </div>
 
           <div className="grid grid-cols-2 gap-2 text-center">
@@ -1061,7 +1100,7 @@ export default function MapDashboard() {
               </div>
             ) : (
               <div className="space-y-1">
-                <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Zona Activa</label>
+                <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Zona activa</label>
                 <select
                   value={selectedZoneId || ""}
                   onChange={(e) => {
@@ -1081,7 +1120,63 @@ export default function MapDashboard() {
                 </select>
               </div>
             )}
+            {viewMode === "region" && selectedRegionId && (
+              <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer pt-1">
+                <input
+                  type="checkbox"
+                  checked={showZonePolygons}
+                  onChange={(e) => setShowZonePolygons(e.target.checked)}
+                  className="rounded accent-emerald-500"
+                />
+                Mostrar polígonos de zonas en el mapa
+              </label>
+            )}
           </div>
+
+          {viewMode === "region" && selectedRegionSummary && (
+            <div className="p-3 rounded-xl border border-emerald-500/25 bg-emerald-950/20 space-y-2">
+              <h4 className="text-xs font-bold text-emerald-400 uppercase tracking-wider">
+                Región: {selectedRegionSummary.region?.nombre}
+              </h4>
+              <div className="grid grid-cols-2 gap-2 text-[11px]">
+                <div><span className="text-slate-500">Zonas</span><p className="font-bold text-white">{selectedRegionSummary.zoneCount}</p></div>
+                <div><span className="text-slate-500">Contenedores</span><p className="font-bold text-white">{selectedRegionSummary.containerCount}</p></div>
+                <div><span className="text-slate-500">Camiones</span><p className="font-bold text-sky-400">{selectedRegionSummary.truckCount}</p></div>
+                <div><span className="text-slate-500">Llenado prom.</span><p className="font-bold text-amber-400">{selectedRegionSummary.avgVol}%</p></div>
+              </div>
+              {selectedRegionSummary.contamination > 0 && (
+                <p className="text-[10px] text-rose-400 font-semibold">
+                  {selectedRegionSummary.contamination} alerta(s) de contaminación
+                </p>
+              )}
+              {!showZonePolygons && (
+                <p className="text-[10px] text-slate-500">Vista agregada de región (zonas ocultas en mapa)</p>
+              )}
+            </div>
+          )}
+
+          {selectedZoneDetail && (
+            <div className="p-3 rounded-xl border border-sky-500/30 bg-sky-950/20 space-y-2">
+              <div className="flex justify-between items-start">
+                <h4 className="text-xs font-bold text-sky-400 uppercase tracking-wider">Zona: {selectedZoneDetail.nombre}</h4>
+                <button type="button" className="text-slate-500 hover:text-white text-xs" onClick={() => setSelectedZoneDetail(null)}>✕</button>
+              </div>
+              <p className="text-[11px] text-slate-400">
+                Contenedores en zona: {containers.filter((c) => c.idZone === selectedZoneDetail.id).length}
+              </p>
+              <button
+                type="button"
+                className="w-full py-1.5 text-xs bg-slate-800 hover:bg-slate-700 rounded-lg border border-slate-700 text-white font-medium"
+                onClick={() => {
+                  setViewMode("zone");
+                  setSelectedZoneId(selectedZoneDetail.id);
+                  layerManagerRef.current?.focusZone(selectedZoneDetail);
+                }}
+              >
+                Ver solo esta zona
+              </button>
+            </div>
+          )}
 
           {/* Collapsible Section 1: Contenedores */}
           <div className="space-y-2 border border-slate-800/60 rounded-xl p-1 bg-slate-950/20">
@@ -1093,7 +1188,7 @@ export default function MapDashboard() {
             />
             {sections.containers && (
               <div className="p-2 space-y-3">
-                {/* Add container on map */}
+                {canManage && (
                 <button
                   type="button"
                   onClick={() => updateAddingMode(addingMode === "container" ? "idle" : "container")}
@@ -1106,6 +1201,7 @@ export default function MapDashboard() {
                 >
                   {addingMode === "container" ? "✓ Cancelar colocación" : "+ Colocar en el mapa"}
                 </button>
+                )}
 
                 {/* Filters */}
                 <div className="p-2 bg-slate-900/60 rounded-lg border border-slate-800 space-y-2">
@@ -1172,6 +1268,7 @@ export default function MapDashboard() {
                           >
                             {c.nombre || c.ubicacion || `Contenedor #${c.id}`}
                           </button>
+                          {canManage && (
                           <button
                             type="button"
                             onClick={(e) => handleDeleteContainer(e, c.id)}
@@ -1182,6 +1279,7 @@ export default function MapDashboard() {
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                             </svg>
                           </button>
+                          )}
                         </div>
                       ))
                     )}
@@ -1201,6 +1299,7 @@ export default function MapDashboard() {
             />
             {sections.trucks && (
               <div className="p-2 space-y-3">
+                {canManage && (
                 <button
                   type="button"
                   onClick={() => updateAddingMode(addingMode === "truck" ? "idle" : "truck")}
@@ -1213,6 +1312,7 @@ export default function MapDashboard() {
                 >
                   {addingMode === "truck" ? "✓ Cancelar colocación" : "+ Colocar en el mapa"}
                 </button>
+                )}
 
                 {/* List scrollable with delete buttons */}
                 <div className="space-y-1">
@@ -1244,6 +1344,7 @@ export default function MapDashboard() {
                             <span className="font-bold text-sky-400">{t.placa}</span>
                             <span className="text-[9px] text-slate-500 ml-1.5">({t.estado})</span>
                           </button>
+                          {canManage && (
                           <button
                             type="button"
                             onClick={(e) => handleDeleteTruck(e, t.id)}
@@ -1254,6 +1355,7 @@ export default function MapDashboard() {
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                             </svg>
                           </button>
+                          )}
                         </div>
                       ))
                     )}
@@ -1274,7 +1376,7 @@ export default function MapDashboard() {
             {sections.zones && (
               <div className="p-2 space-y-3">
                 {/* Zone drawing trigger */}
-                {!isDrawing ? (
+                {canManage && !isDrawing ? (
                   <button
                     type="button"
                     onClick={handleStartDraw}
@@ -1283,7 +1385,7 @@ export default function MapDashboard() {
                   >
                     + Dibujar zona en el mapa
                   </button>
-                ) : (
+                ) : canManage && isDrawing ? (
                   <div className="space-y-2 p-2 bg-slate-900 border border-sky-500/40 rounded-lg">
                     <span className="text-[10px] text-sky-300 font-bold block text-center uppercase tracking-wide">Modo dibujo activo</span>
                     <button
@@ -1308,7 +1410,7 @@ export default function MapDashboard() {
                       Cancelar (ESC)
                     </button>
                   </div>
-                )}
+                ) : null}
 
                 {drawError && (
                   <p className="text-[10px] text-red-400 bg-red-950/40 p-2 rounded border border-red-500/30">
@@ -1332,6 +1434,7 @@ export default function MapDashboard() {
                             type="button"
                             onClick={() => {
                               setSelectedZoneId(z.id);
+                              setSelectedZoneDetail(z);
                               layerManagerRef.current?.focusZone(z);
                             }}
                             className={`flex-1 text-left truncate cursor-pointer font-medium ${
@@ -1341,6 +1444,7 @@ export default function MapDashboard() {
                             {z.nombre}
                             {z.regionId && <span className="text-[8px] text-slate-500 ml-1.5">(Reg)</span>}
                           </button>
+                          {canManage && (
                           <button
                             type="button"
                             onClick={(e) => handleDeleteZone(e, z.id)}
@@ -1351,6 +1455,7 @@ export default function MapDashboard() {
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                             </svg>
                           </button>
+                          )}
                         </div>
                       ))
                     )}
@@ -1384,7 +1489,7 @@ export default function MapDashboard() {
                         </option>
                       ))}
                     </select>
-                    {selectedRegionId && (
+                    {canManage && selectedRegionId && (
                       <button
                         type="button"
                         onClick={() => handleDeleteRegion(selectedRegionId)}
@@ -1395,6 +1500,7 @@ export default function MapDashboard() {
                       </button>
                     )}
                   </div>
+                  {canManage && (
                   <div className="flex gap-1.5">
                     <input
                       className="input flex-1 text-xs py-1.5"
@@ -1410,9 +1516,30 @@ export default function MapDashboard() {
                       +
                     </button>
                   </div>
+                  )}
                 </div>
 
-                {selectedRegionId && (
+                {selectedRegionId && !canManage && (
+                  <div className="border-t border-slate-800 pt-2 space-y-1">
+                    <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Zonas en esta región</p>
+                    {zones.filter((z) => z.idRegion === selectedRegionId).map((z) => (
+                      <button
+                        key={z.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedZoneDetail(z);
+                          setSelectedZoneId(z.id);
+                          layerManagerRef.current?.focusZone(z);
+                        }}
+                        className="w-full text-left px-2 py-1.5 text-xs rounded bg-slate-900/50 hover:bg-slate-800 text-slate-300"
+                      >
+                        {z.nombre}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {selectedRegionId && canManage && (
                   <div className="space-y-2">
                     <div className="border-t border-slate-800 pt-2">
                       <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block mb-1">
@@ -1423,21 +1550,33 @@ export default function MapDashboard() {
                           <p className="text-[10px] text-slate-500 py-2 text-center">No hay zonas registradas</p>
                         ) : (
                           zoneCatalog.map((z) => (
-                            <label
+                            <button
+                              type="button"
                               key={z.id}
-                              className="flex items-center gap-2 text-xs text-slate-350 cursor-pointer hover:bg-slate-800/40 rounded px-1.5 py-1 transition-all"
+                              onClick={() => {
+                                setSelectedZoneDetail(z);
+                                setSelectedZoneId(z.id);
+                                layerManagerRef.current?.focusZone(z);
+                              }}
+                              className="flex w-full items-center gap-2 text-xs text-slate-300 cursor-pointer hover:bg-slate-800/40 rounded px-1.5 py-1 transition-all text-left"
                             >
+                              {canManage && (
                               <input
                                 type="checkbox"
                                 checked={regionZoneIds.includes(z.id)}
-                                onChange={() => toggleCatalogZoneInRegion(z.id)}
+                                onChange={(e) => {
+                                  e.stopPropagation();
+                                  toggleCatalogZoneInRegion(z.id);
+                                }}
+                                onClick={(e) => e.stopPropagation()}
                                 className="rounded accent-green-500 cursor-pointer"
                               />
+                              )}
                               <span className="flex-1 truncate">{z.nombre}</span>
                               {z.regionId && z.regionId !== selectedRegionId && (
                                 <span className="text-[8px] text-amber-500 uppercase font-bold tracking-wider">otra reg.</span>
                               )}
-                            </label>
+                            </button>
                           ))
                         )}
                       </div>

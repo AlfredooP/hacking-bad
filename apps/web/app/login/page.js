@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { api } from "@/lib/api-client";
+import { BrandLogo } from "@/components/layout/BrandLogo";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -27,17 +28,21 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="min-h-screen flex items-center justify-center p-4">
-      <form onSubmit={handleSubmit} className="card w-full max-w-md space-y-4">
-        <h1 className="text-2xl font-bold">Iniciar sesión</h1>
-        {error && <p className="text-red-400 text-sm">{error}</p>}
+    <main className="min-h-screen flex flex-col items-center justify-center p-4 bg-[var(--bg)]">
+      <div className="mb-8">
+        <BrandLogo size="lg" href="/" />
+      </div>
+      <form onSubmit={handleSubmit} className="card w-full max-w-md space-y-4 border-slate-800">
+        <h1 className="text-2xl font-bold text-white">Iniciar sesión</h1>
+        <p className="text-slate-500 text-sm">Accede al panel ATLAS WASTE</p>
+        {error && <p className="text-red-400 text-sm bg-red-950/30 p-2 rounded border border-red-900/40">{error}</p>}
         <div>
           <label className="block text-sm text-slate-400 mb-1">Email</label>
           <input
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="w-full px-3 py-2 rounded bg-slate-900 border border-slate-600"
+            className="input w-full"
             required
           />
         </div>
@@ -47,7 +52,7 @@ export default function LoginPage() {
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="w-full px-3 py-2 rounded bg-slate-900 border border-slate-600"
+            className="input w-full"
             required
           />
         </div>
@@ -56,8 +61,13 @@ export default function LoginPage() {
         </button>
         <p className="text-sm text-slate-400 text-center">
           ¿No tienes cuenta?{" "}
-          <Link href="/registro" className="text-green-400 hover:underline">
+          <Link href="/registro" className="text-emerald-400 hover:underline font-semibold">
             Regístrate
+          </Link>
+        </p>
+        <p className="text-center">
+          <Link href="/" className="text-xs text-slate-600 hover:text-slate-400">
+            ← Volver al inicio
           </Link>
         </p>
       </form>
