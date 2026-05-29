@@ -8,6 +8,7 @@ const readingSchema = z.object({
   id_sensor: z.number().int().positive(),
   tempCelsius: z.number().optional().nullable(),
   humedad: z.number().optional().nullable(),
+  densidad: z.number().optional().nullable(),
   distanciaBoteTapa: z.number().optional().nullable(),
   pesoKg: z.number().optional().nullable(),
 });

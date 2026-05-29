@@ -33,6 +33,7 @@ El valor debe coincidir con la variable de entorno `IOT_API_KEY` del servicio AP
 | id_sensor | int | sí | ID del sensor en tabla `Sensores` |
 | tempCelsius | float | no | Temperatura °C |
 | humedad | float | no | Humedad % |
+| densidad | float | no | Densidad g/cm³ (usada para inferir tipo de residuo) |
 | distanciaBoteTapa | float | no | Distancia en cm (valores 819, 6553.5 se descartan) |
 | pesoKg | float | no | Peso en kg |
 

@@ -5,9 +5,13 @@ export interface ClassifyInput {
   containerId: number;
   tempCelsius?: number | null;
   humedad?: number | null;
+  densidad?: number | null;
   distanciaBoteTapa?: number | null;
   pesoKg?: number | null;
   capacidadLitros?: number | null;
+  tipoResiduoEsperado?: string | null;
+  tiposResiduosPermitidos?: string[];
+  prioridadConfigurada?: "alta" | "media" | "baja" | null;
 }
 
 export interface ClassifyResult {
@@ -17,7 +21,12 @@ export interface ClassifyResult {
   volumenPct: number;
   temperatura?: number | null;
   humedad?: number | null;
+  densidad?: number | null;
   pesoKg?: number | null;
+  tipoResiduoInferido?: string | null;
+  confianzaInferencia?: number | null;
+  contaminacionDetectada?: boolean;
+  mensajeContaminacion?: string | null;
 }
 
 export async function classifyContainers(
@@ -49,20 +58,86 @@ export async function classifyContainers(
   }
 }
 
+function inferWasteType(
+  humedad: number | null | undefined,
+  densidad: number | null | undefined
+): { tipo: string | null; confianza: number } {
+  if (humedad == null || densidad == null) return { tipo: null, confianza: 0 };
+
+  const humAlta = humedad >= 55;
+  const humBaja = humedad <= 35;
+  const densBaja = densidad < 0.35;
+  const densMedia = densidad >= 0.35 && densidad < 0.75;
+  const densAlta = densidad >= 0.75;
+
+  if (humAlta && densAlta) return { tipo: "Orgánicos", confianza: 0.88 };
+  if (humBaja && densBaja) return { tipo: "Plástico", confianza: 0.82 };
+  if (humBaja && densMedia) return { tipo: "Papel/Cartón", confianza: 0.8 };
+  if (humBaja && densAlta) return { tipo: "Vidrio/Metal", confianza: 0.85 };
+  return { tipo: "Reciclables", confianza: 0.55 };
+}
+
+function isCompatible(inferred: string, allowed: string[]): boolean {
+  if (allowed.length === 0) return true;
+  const groups: Record<string, string[]> = {
+    Orgánicos: ["Orgánicos", "Orgánico"],
+    Reciclables: ["Reciclables", "Plástico", "Papel/Cartón"],
+    Inorgánicos: ["Inorgánicos", "Vidrio/Metal"],
+    Plástico: ["Reciclables", "Plástico"],
+    "Papel/Cartón": ["Reciclables", "Papel/Cartón"],
+    "Vidrio/Metal": ["Inorgánicos", "Vidrio/Metal"],
+  };
+  const inferredSet = groups[inferred] ?? [inferred];
+  return allowed.some((a) => {
+    const allowedSet = groups[a] ?? [a];
+    return inferredSet.some((i) => allowedSet.some((x) => x.toLowerCase() === i.toLowerCase()));
+  });
+}
+
 function fallbackClassify(inputs: ClassifyInput[]): ClassifyResult[] {
   return inputs.map((c) => {
     const vol = estimateVolume(c);
     let prioridad: "alta" | "media" | "baja" = "baja";
     if (vol >= 80) prioridad = "alta";
     else if (vol >= 50) prioridad = "media";
+
+    if (c.prioridadConfigurada) {
+      const rank = { baja: 0, media: 1, alta: 2 };
+      if (rank[c.prioridadConfigurada] > rank[prioridad]) prioridad = c.prioridadConfigurada;
+    }
+
+    const dens =
+      c.densidad ??
+      (c.pesoKg && vol > 5
+        ? c.pesoKg / ((c.capacidadLitros ?? 50) * (vol / 100))
+        : null);
+
+    const { tipo, confianza } = inferWasteType(c.humedad, dens);
+    const allowed =
+      c.tiposResiduosPermitidos ??
+      (c.tipoResiduoEsperado ? [c.tipoResiduoEsperado] : []);
+
+    let contaminacion = false;
+    let mensaje: string | null = null;
+    if (tipo && allowed.length > 0 && !isCompatible(tipo, allowed)) {
+      contaminacion = true;
+      mensaje = `Contaminación detectada: se esperaba [${allowed.join(", ")}] pero los sensores sugieren [${tipo}]`;
+      prioridad = "alta";
+    }
+
     return {
       containerId: c.containerId,
       prioridad,
-      score: 0.7,
+      score: contaminacion ? 0.95 : 0.7,
       volumenPct: vol,
       temperatura: c.tempCelsius,
       humedad: c.humedad,
+      densidad: dens,
       pesoKg: c.pesoKg,
+      tipoResiduoInferido: tipo,
+      confianzaInferencia: confianza,
+      contaminacionDetectada: contaminacion,
+      mensajeContaminacion: mensaje,
     };
   });
 }
@@ -90,6 +165,9 @@ export interface OptimizeRouteInput {
     volumenPct: number;
     prioridad: string;
     tipoResiduo: string;
+    tipoResiduoInferido?: string | null;
+    contaminacionDetectada?: boolean;
+    capacidadMax?: number | null;
   }[];
   trucks: {
     id: number;
@@ -137,8 +215,15 @@ export async function optimizeRoute(
   }
 }
 
+function effectiveWaste(c: OptimizeRouteInput["containers"][0]): string {
+  if (c.contaminacionDetectada && c.tipoResiduoInferido) return c.tipoResiduoInferido;
+  return c.tipoResiduoInferido ?? c.tipoResiduo;
+}
+
 function fallbackOptimize(input: OptimizeRouteInput): OptimizeRouteResult {
-  const critical = input.containers.filter((c) => c.volumenPct >= 70 || c.prioridad === "alta");
+  const critical = input.containers.filter(
+    (c) => c.volumenPct >= 70 || c.prioridad === "alta" || c.contaminacionDetectada
+  );
   if (critical.length === 0 || input.trucks.length === 0) {
     return {
       truckId: input.trucks[0]?.id ?? null,
@@ -148,9 +233,12 @@ function fallbackOptimize(input: OptimizeRouteInput): OptimizeRouteResult {
   }
 
   const truck = input.trucks[0];
+  const truckTypes = (truck.tipoResiduos ?? "").split(",").map((t) => t.trim().toLowerCase());
+  const compat = critical.filter((c) => truckTypes.includes(effectiveWaste(c).toLowerCase()));
+
   let currentLat = truck.latitud;
   let currentLng = truck.longitud;
-  const unvisited = [...critical];
+  const unvisited = [...compat];
   const route: number[] = [];
 
   while (unvisited.length > 0) {

@@ -128,15 +128,26 @@ function createTruckMarkerEl() {
 }
 
 function containerPopupHTML(c, color, priority, vol) {
+  const inferido = c.ia?.tipoResiduoInferido;
+  const contaminacion = c.ia?.contaminacionDetectada;
   return `
     <div style="padding:14px 16px;font-family:system-ui,-apple-system,sans-serif;">
       <h4 style="font-weight:700;font-size:14px;color:#f1f5f9;border-bottom:1px solid #334155;padding-bottom:8px;margin:0 0 10px 0;">
-        ${c.ubicacion || "Contenedor"}
+        ${c.nombre || c.ubicacion || "Contenedor"}
       </h4>
+      ${contaminacion ? `<div style="background:#7f1d1d;color:#fecaca;padding:6px 8px;border-radius:6px;font-size:10px;margin-bottom:8px;">⚠ ${c.ia?.mensajeContaminacion || "Contaminación detectada"}</div>` : ""}
       <div style="display:flex;flex-direction:column;gap:6px;font-size:12px;">
         <div style="display:flex;justify-content:space-between;">
-          <span style="color:#94a3b8;">Tipo:</span>
-          <span style="color:#f1f5f9;font-weight:600;">${c.tipoResiduo || "Sin definir"}</span>
+          <span style="color:#94a3b8;">Esperado:</span>
+          <span style="color:#22c55e;font-weight:600;">${c.tipoResiduo || "Sin definir"}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;">
+          <span style="color:#94a3b8;">Inferido (IA):</span>
+          <span style="color:#38bdf8;font-weight:600;">${inferido || "Sin datos"}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;">
+          <span style="color:#94a3b8;">Zona:</span>
+          <span style="color:#f1f5f9;font-weight:600;">${c.zona || "—"}</span>
         </div>
         <div style="display:flex;justify-content:space-between;">
           <span style="color:#94a3b8;">Nivel Llenado:</span>
@@ -148,7 +159,7 @@ function containerPopupHTML(c, color, priority, vol) {
         </div>
         <div style="display:flex;justify-content:space-between;">
           <span style="color:#94a3b8;">Estado:</span>
-          <span style="color:#f1f5f9;font-weight:600;">${c.estado || "—"}</span>
+          <span style="color:#f1f5f9;font-weight:600;">${c.estado || "—"} (${c.estadoOperativo || "Activo"})</span>
         </div>
         <div style="margin-top:6px;">
           <div style="width:100%;background:#0f172a;border-radius:4px;height:6px;overflow:hidden;">
@@ -185,6 +196,10 @@ function truckPopupHTML(t) {
   `;
 }
 
+const WASTE_FILTER_OPTIONS = [
+  "", "Orgánicos", "Inorgánicos", "Reciclables", "Plástico", "Papel/Cartón", "Vidrio/Metal",
+];
+
 export default function MapDashboard() {
   const mapRef = useRef(null);
   const mapInstance = useRef(null);
@@ -195,6 +210,11 @@ export default function MapDashboard() {
   const [selectedContainer, setSelectedContainer] = useState(null);
   const [mapReady, setMapReady] = useState(false);
   const [loading, setLoading] = useState(true);
+
+  // Filtros del mapa
+  const [filterTipo, setFilterTipo] = useState("");
+  const [filterPrioridad, setFilterPrioridad] = useState("");
+  const [filterSoloContaminacion, setFilterSoloContaminacion] = useState(false);
 
   // Simulation states
   const [activeRoute, setActiveRoute] = useState(null);
@@ -222,8 +242,13 @@ export default function MapDashboard() {
   useEffect(() => {
     const fetchData = async () => {
       try {
+        const params = {};
+        if (filterTipo) params.tipoResiduo = filterTipo;
+        if (filterPrioridad) params.prioridad = filterPrioridad;
+        if (filterSoloContaminacion) params.soloContaminacion = true;
+
         const [cRes, tRes] = await Promise.all([
-          api.containersMap(),
+          api.containersMap(params),
           api.trucksList(),
         ]);
         setContainers(cRes.containers || []);
@@ -237,13 +262,12 @@ export default function MapDashboard() {
 
     fetchData();
 
-    // Poll every 5 seconds for real-time updates
     const interval = setInterval(() => {
       fetchData();
     }, 5000);
 
     return () => clearInterval(interval);
-  }, [tick]);
+  }, [tick, filterTipo, filterPrioridad, filterSoloContaminacion]);
 
   // 2. Initialize Map
   useEffect(() => {
@@ -345,9 +369,11 @@ export default function MapDashboard() {
     containers.forEach((c) => {
       if (!c.latitud || !c.longitud) return;
 
-      const priority = c.ia?.prioridad || "baja";
+      const priority = c.ia?.prioridadEfectiva || c.ia?.prioridad || "baja";
       const vol = c.ia?.volumenPct != null ? Math.round(c.ia.volumenPct) : 0;
-      const color = PRIORITY_COLORS[priority] || "#64748b";
+      const color = c.ia?.contaminacionDetectada
+        ? "#dc2626"
+        : PRIORITY_COLORS[priority] || "#64748b";
 
       let marker = containerMarkersRef.current[c.id];
 
@@ -390,8 +416,6 @@ export default function MapDashboard() {
         if (badge) {
           badge.style.background = color;
         }
-
-        // Update popup
         const popup = marker.getPopup();
         if (popup) {
           popup.setHTML(containerPopupHTML(c, color, priority, vol));
@@ -700,6 +724,40 @@ export default function MapDashboard() {
             </div>
           </div>
 
+          {/* Filtros */}
+          <div className="p-3 bg-slate-800/40 rounded-xl border border-slate-700/30 space-y-2">
+            <h4 className="text-xs font-bold text-white uppercase tracking-wider">Filtros</h4>
+            <select
+              value={filterTipo}
+              onChange={(e) => setFilterTipo(e.target.value)}
+              className="input w-full text-xs py-1.5"
+            >
+              <option value="">Todos los residuos</option>
+              {WASTE_FILTER_OPTIONS.filter(Boolean).map((t) => (
+                <option key={t} value={t}>{t}</option>
+              ))}
+            </select>
+            <select
+              value={filterPrioridad}
+              onChange={(e) => setFilterPrioridad(e.target.value)}
+              className="input w-full text-xs py-1.5"
+            >
+              <option value="">Todas las prioridades</option>
+              <option value="alta">Alta</option>
+              <option value="media">Media</option>
+              <option value="baja">Baja</option>
+            </select>
+            <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={filterSoloContaminacion}
+                onChange={(e) => setFilterSoloContaminacion(e.target.checked)}
+                className="rounded"
+              />
+              Solo contaminación
+            </label>
+          </div>
+
           {/* Route Optimization Box */}
           <div className="p-3.5 bg-slate-800/40 rounded-xl border border-slate-700/30 space-y-3">
             <h4 className="text-xs font-bold text-white uppercase tracking-wider">Optimización de Ruta</h4>
@@ -767,12 +825,25 @@ export default function MapDashboard() {
 
               <div className="space-y-2 text-xs">
                 <div className="flex justify-between border-b border-slate-800 pb-1">
-                  <span className="text-slate-400">Ubicación:</span>
-                  <span className="font-semibold text-white">{selectedContainer.ubicacion}</span>
+                  <span className="text-slate-400">Nombre:</span>
+                  <span className="font-semibold text-white">{selectedContainer.nombre || selectedContainer.ubicacion}</span>
                 </div>
                 <div className="flex justify-between border-b border-slate-800 pb-1">
-                  <span className="text-slate-400">Tipo Residuo:</span>
+                  <span className="text-slate-400">Esperado:</span>
                   <span className="font-semibold text-green-400">{selectedContainer.tipoResiduo || "Sin definir"}</span>
+                </div>
+                <div className="flex justify-between border-b border-slate-800 pb-1">
+                  <span className="text-slate-400">Inferido (IA):</span>
+                  <span className="font-semibold text-sky-400">{selectedContainer.ia?.tipoResiduoInferido || "Sin datos"}</span>
+                </div>
+                {selectedContainer.ia?.contaminacionDetectada && (
+                  <div className="p-2 bg-rose-950/50 border border-rose-500/30 rounded-lg text-rose-300 text-[11px]">
+                    {selectedContainer.ia.mensajeContaminacion}
+                  </div>
+                )}
+                <div className="flex justify-between border-b border-slate-800 pb-1">
+                  <span className="text-slate-400">Zona:</span>
+                  <span className="font-semibold text-white">{selectedContainer.zona || "—"}</span>
                 </div>
                 <div className="flex justify-between border-b border-slate-800 pb-1">
                   <span className="text-slate-400">Estado:</span>
@@ -792,7 +863,7 @@ export default function MapDashboard() {
                       style={{
                         height: "100%",
                         width: `${selectedContainer.ia?.volumenPct || 0}%`,
-                        backgroundColor: PRIORITY_COLORS[selectedContainer.ia?.prioridad || "baja"],
+                        backgroundColor: PRIORITY_COLORS[selectedContainer.ia?.prioridadEfectiva || selectedContainer.ia?.prioridad || "baja"],
                         transition: "width 0.3s",
                       }}
                     />

@@ -1,7 +1,11 @@
-import { PrioridadIa } from "@prisma/client";
 import type { Env } from "../../config/env.js";
 import { prisma } from "../../lib/prisma.js";
 import { classifyContainers } from "../ai/aiClient.js";
+import {
+  getCapacidadLitros,
+  persistClassificationResult,
+} from "../containers/containers.service.js";
+import { parseAllowedTypes } from "../containers/waste-types.js";
 import { sanitizeReading, type RawReading } from "./sanitize.js";
 
 export async function ingestReading(env: Env, raw: RawReading) {
@@ -25,48 +29,33 @@ export async function ingestReading(env: Env, raw: RawReading) {
       fechaHora: new Date(),
       tempCelsius: sanitized.tempCelsius,
       humedad: sanitized.humedad,
+      densidad: sanitized.densidad,
       distanciaBoteTapa: sanitized.distanciaBoteTapa,
       pesoKg: sanitized.pesoKg,
     },
   });
 
-  if (sensor.idContenedor) {
-    const capMatch = sensor.contenedor?.capacidad?.match(/(\d+)/);
-    const capacidadLitros = capMatch ? parseInt(capMatch[1], 10) : null;
+  if (sensor.idContenedor && sensor.contenedor) {
+    const container = sensor.contenedor;
+    const capacidadLitros = getCapacidadLitros(container);
 
     const results = await classifyContainers(env, [
       {
         containerId: sensor.idContenedor,
         tempCelsius: sanitized.tempCelsius,
         humedad: sanitized.humedad,
+        densidad: sanitized.densidad,
         distanciaBoteTapa: sanitized.distanciaBoteTapa,
         pesoKg: sanitized.pesoKg,
         capacidadLitros,
+        tipoResiduoEsperado: container.tipoResiduo,
+        tiposResiduosPermitidos: parseAllowedTypes(container.tiposResiduosPermitidos),
+        prioridadConfigurada: container.prioridadConfigurada,
       },
     ]);
 
     for (const r of results) {
-      await prisma.resultadoIa.upsert({
-        where: { idContenedor: r.containerId },
-        create: {
-          idContenedor: r.containerId,
-          prioridad: r.prioridad as PrioridadIa,
-          score: r.score,
-          volumenPct: r.volumenPct,
-          temperatura: r.temperatura ?? undefined,
-          humedad: r.humedad ?? undefined,
-          pesoKg: r.pesoKg ?? undefined,
-        },
-        update: {
-          prioridad: r.prioridad as PrioridadIa,
-          score: r.score,
-          volumenPct: r.volumenPct,
-          temperatura: r.temperatura ?? undefined,
-          humedad: r.humedad ?? undefined,
-          pesoKg: r.pesoKg ?? undefined,
-          fechaClasificacion: new Date(),
-        },
-      });
+      await persistClassificationResult(sensor.idContenedor, r, container);
     }
   }
 

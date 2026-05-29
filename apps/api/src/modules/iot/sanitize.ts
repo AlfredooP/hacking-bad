@@ -12,6 +12,7 @@ export interface RawReading {
   id_sensor?: number;
   tempCelsius?: number | null;
   humedad?: number | null;
+  densidad?: number | null;
   distanciaBoteTapa?: number | null;
   pesoKg?: number | null;
 }
@@ -20,6 +21,7 @@ export interface SanitizedReading {
   idSensor: number;
   tempCelsius: number | null;
   humedad: number | null;
+  densidad: number | null;
   distanciaBoteTapa: number | null;
   pesoKg: number | null;
 }
@@ -43,10 +45,14 @@ export function sanitizeReading(raw: RawReading): SanitizedReading | null {
   let peso = raw.pesoKg ?? null;
   if (peso !== null && (peso < -1 || peso > MAX_WEIGHT_KG)) peso = null;
 
+  let densidad = raw.densidad ?? null;
+  if (densidad !== null && (densidad < 0 || densidad > 5)) densidad = null;
+
   return {
     idSensor: raw.id_sensor,
     tempCelsius: temp,
     humedad: hum,
+    densidad,
     distanciaBoteTapa: dist,
     pesoKg: peso,
   };

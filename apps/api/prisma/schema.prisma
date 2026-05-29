@@ -23,16 +23,23 @@ model Camion {
 }
 
 model Contenedor {
-  idContenedor     Int              @id @default(autoincrement()) @map("id_contenedor")
-  ubicacion        String?          @db.VarChar(100)
-  latitud          Decimal?         @db.Decimal(10, 6)
-  longitud         Decimal?         @db.Decimal(10, 6)
-  capacidad        String?          @db.VarChar(20)
-  estado           String?          @db.VarChar(20)
-  tipoResiduo      String?          @map("tipo_residuo") @db.VarChar(50)
-  sensores         Sensor[]
-  resultadoIa      ResultadoIa?
-  rutaContenedores RutaContenedor[]
+  idContenedor              Int                    @id @default(autoincrement()) @map("id_contenedor")
+  nombre                    String?                @db.VarChar(100)
+  ubicacion                 String?                @db.VarChar(100)
+  zona                      String?                @db.VarChar(50)
+  latitud                   Decimal?               @db.Decimal(10, 6)
+  longitud                  Decimal?               @db.Decimal(10, 6)
+  capacidad                 String?                @db.VarChar(20)
+  capacidadMax              Float?                 @map("capacidad_max")
+  estado                    String?                @db.VarChar(20)
+  estadoOperativo           String?                @default("Activo") @map("estado_operativo") @db.VarChar(20)
+  tipoResiduo               String?                @map("tipo_residuo") @db.VarChar(50)
+  tiposResiduosPermitidos   String?                @map("tipos_residuos_permitidos") @db.VarChar(255)
+  prioridadConfigurada      PrioridadIa?           @map("prioridad_configurada")
+  sensores                  Sensor[]
+  resultadoIa               ResultadoIa?
+  rutaContenedores          RutaContenedor[]
+  alertasContaminacion      AlertaContaminacion[]
 
   @@map("Contenedores")
 }
@@ -54,6 +61,7 @@ model LecturaSensor {
   fechaHora         DateTime? @map("fecha_hora")
   tempCelsius       Float?    @map("tempCelsius")
   humedad           Float?
+  densidad          Float?
   distanciaBoteTapa Float?    @map("distanciaBoteTapa")
   pesoKg            Float?    @map("pesoKg")
   sensor            Sensor?   @relation(fields: [idSensor], references: [idSensor])
@@ -69,20 +77,39 @@ enum PrioridadIa {
 }
 
 model ResultadoIa {
-  id                 Int          @id @default(autoincrement())
-  idContenedor       Int          @map("id_contenedor")
-  prioridad          PrioridadIa
-  score              Float?
-  volumenPct         Float?       @map("volumen_pct")
-  temperatura        Float?
-  humedad            Float?
-  pesoKg             Float?       @map("peso_kg")
-  fechaClasificacion DateTime     @default(now()) @map("fecha_clasificacion")
-  contenedor         Contenedor   @relation(fields: [idContenedor], references: [idContenedor], onDelete: Cascade)
+  id                    Int          @id @default(autoincrement())
+  idContenedor          Int          @map("id_contenedor")
+  prioridad             PrioridadIa
+  score                 Float?
+  volumenPct            Float?       @map("volumen_pct")
+  temperatura           Float?
+  humedad               Float?
+  densidad              Float?
+  pesoKg                Float?       @map("peso_kg")
+  tipoResiduoInferido   String?      @map("tipo_residuo_inferido") @db.VarChar(50)
+  confianzaInferencia   Float?       @map("confianza_inferencia")
+  contaminacionDetectada Boolean     @default(false) @map("contaminacion_detectada")
+  mensajeContaminacion  String?      @map("mensaje_contaminacion") @db.VarChar(255)
+  fechaClasificacion    DateTime     @default(now()) @map("fecha_clasificacion")
+  contenedor            Contenedor   @relation(fields: [idContenedor], references: [idContenedor], onDelete: Cascade)
 
   @@unique([idContenedor], map: "uq_resultado_ia_contenedor")
   @@index([prioridad, fechaClasificacion(sort: Desc)], map: "idx_ria_prioridad")
   @@map("ResultadosIA")
+}
+
+model AlertaContaminacion {
+  id               Int        @id @default(autoincrement())
+  idContenedor     Int        @map("id_contenedor")
+  tipoEsperado     String?    @map("tipo_esperado") @db.VarChar(50)
+  tipoInferido     String?    @map("tipo_inferido") @db.VarChar(50)
+  mensaje          String?    @db.VarChar(255)
+  resuelta         Boolean    @default(false)
+  fechaDeteccion   DateTime   @default(now()) @map("fecha_deteccion")
+  contenedor       Contenedor @relation(fields: [idContenedor], references: [idContenedor], onDelete: Cascade)
+
+  @@index([idContenedor, fechaDeteccion(sort: Desc)], map: "idx_alerta_contenedor")
+  @@map("AlertasContaminacion")
 }
 
 model ReporteCiudadano {

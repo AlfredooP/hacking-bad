@@ -8,6 +8,7 @@ import { api } from "@/lib/api-client";
 const NAV = [
   { href: "/dashboard", label: "Resumen" },
   { href: "/dashboard/mapa", label: "Mapa" },
+  { href: "/dashboard/contenedores", label: "Contenedores" },
   { href: "/dashboard/camiones", label: "Flota de Camiones" },
 ];
 
