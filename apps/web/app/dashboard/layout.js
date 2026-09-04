@@ -41,8 +41,8 @@ export default function DashboardLayout({ children }) {
     <div className="min-h-screen flex flex-col">
       <header className="border-b border-slate-700 px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-6">
-          <span className="font-bold text-green-400">BIN NEXT</span>
-          <nav className="flex gap-4 text-sm">
+          <span className="font-bold text-green-600">ATLAS WASTE</span>
+          <nav className="flex gap-4">
             {NAV.map((item) => (
               <Link
                 key={item.href}
@@ -57,7 +57,7 @@ export default function DashboardLayout({ children }) {
           </nav>
         </div>
         <div className="flex items-center gap-4 text-sm">
-          <span className="text-slate-400">{user.nombre}</span>
+          {/* <span className="text-slate-400">{user.nombre}</span> */}
           <button onClick={handleLogout} className="text-slate-400 hover:text-white">
             Salir
           </button>

@@ -3,7 +3,8 @@ import Link from "next/link";
 export default function HomePage() {
   return (
     <main className="min-h-screen flex flex-col items-center justify-center p-8 text-center">
-      <h1 className="text-4xl font-bold mb-4 text-green-400">BIN NEXT</h1>
+      <img src="/logo.png" alt="Atlas Waste" width="180" height="180" />
+      <h1 className="text-4xl font-bold mb-4 text-green-400">ATLAS WASTE</h1>
       <p className="text-lg text-slate-400 mb-8 max-w-md">
         Plataforma de gestión inteligente de contenedores con sensores IoT, mapas
         interactivos y priorización por IA.

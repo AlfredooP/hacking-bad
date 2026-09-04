@@ -258,7 +258,24 @@ export async function updateContainer(id: number, data: UpdateContainerInput) {
 }
 
 export async function deleteContainer(id: number) {
-  await prisma.contenedor.delete({ where: { idContenedor: id } });
+  await prisma.$transaction(async (transaction) => {
+    await transaction.rutaContenedor.deleteMany({
+      where: { idContenedor: id },
+    });
+    await transaction.lecturaSensor.deleteMany({
+      where: { sensor: { idContenedor: id } },
+    });
+    await transaction.sensor.deleteMany({
+      where: { idContenedor: id },
+    });
+    await transaction.resultadoIa.deleteMany({
+      where: { idContenedor: id },
+    });
+    await transaction.alertaContaminacion.deleteMany({
+      where: { idContenedor: id },
+    });
+    await transaction.contenedor.delete({ where: { idContenedor: id } });
+  });
 }
 
 export async function listContaminationAlerts(resueltas?: boolean) {

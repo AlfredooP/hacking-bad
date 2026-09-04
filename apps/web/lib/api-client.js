@@ -1,6 +1,6 @@
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost/api";
 
-async function request(path, options = {}) {
+async function request(path, options = {}, retry = true) {
   const res = await fetch(`${API_BASE}/v1${path}`, {
     ...options,
     credentials: "include",
@@ -11,6 +11,18 @@ async function request(path, options = {}) {
   });
 
   const data = await res.json().catch(() => ({}));
+  if (res.status === 401 && retry && path !== "/auth/login" && path !== "/auth/refresh") {
+    const refresh = await fetch(`${API_BASE}/v1/auth/refresh`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+    });
+
+    if (refresh.ok) {
+      return request(path, options, false);
+    }
+  }
+
   if (!res.ok) {
     throw new Error(data.error || `Request failed: ${res.status}`);
   }
